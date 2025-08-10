@@ -1,0 +1,11 @@
+# Python virtual environment
+venv/
+__pycache__/
+*.pyc
+
+# Secrets
+.env
+
+# Infrastructure binaries
+bin/
+
