@@ -1,0 +1,42 @@
+# Polaris Project Configuration
+# Grouped logically so that _flatten_dict will map them to uppercase env vars.
+# Example: swim.host -> SWIM_HOST
+
+nats:
+  url: "nats://localhost:4222"
+
+swim:
+  host: "localhost"
+  port: 4242
+  cmd_timeout: 30.0
+  max_retries: 2
+  retry_base_delay: 1.0
+  retry_max_delay: 5.0
+  min_gap_between_actions: 0.0
+  metric_commands: >
+    dimmer,get_active_servers,get_max_servers,get_servers,
+    get_basic_rt,get_opt_rt,get_basic_throughput,
+    get_opt_throughput,get_arrival_rate
+  utilization_scan: true
+  utilization_prefix: "get_utilization server"
+  utilization_metric_name: "total_utilization"
+
+monitor:
+  interval: 5.0
+  metrics_concurrency: 1   # keep low because SWIM is single-threaded
+
+telemetry:
+  subject: "polaris.telemetry.events"
+  batch_subject: "polaris.telemetry.events.batch"
+  batch_size: 100
+  batch_max_wait: 1.0       # seconds to wait before sending incomplete batch
+  queue_maxsize: 5000       # 0 = unbounded
+
+execution:
+  queue_maxsize: 1000       # execution adapter queue size
+
+logger:
+  name: "swim_adapter"
+  level: "INFO"
+  format: "pretty"
+
