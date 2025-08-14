@@ -27,7 +27,7 @@ from polaris.common.config import load_config, get_config
 # load config (adjust path(s) as needed)
 load_config(
     search_paths=[Path(
-        "/home/prakhar/dev/prakhar479/POLARIS/polaris_poc/config/polaris_config.yaml")],
+        "/home/prakhar/dev/prakhar479/POLARIS/polaris_poc/src/config/polaris_config.yaml")],
     required_keys=["SWIM_HOST", "SWIM_PORT", "NATS_URL"],
 )
 

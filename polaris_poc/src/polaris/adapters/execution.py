@@ -21,7 +21,7 @@ from polaris.common import setup_logging, now_iso, jittered_backoff
 from polaris.common.config import load_config, get_config
 
 
-load_config(search_paths=[Path("/home/prakhar/dev/prakhar479/POLARIS/polaris_poc/config/polaris_config.yaml")],
+load_config(search_paths=[Path("/home/prakhar/dev/prakhar479/POLARIS/polaris_poc/src/config/polaris_config.yaml")],
             required_keys=["SWIM_HOST", "SWIM_PORT", "NATS_URL"])
 
 
@@ -173,7 +173,8 @@ class SwimExecutionAdapter:
         self.retry_max_delay = get_config("SWIM_RETRY_MAX_DELAY", "5.0", float)
         self.min_gap_between_actions = get_config(
             "SWIM_MIN_GAP_BETWEEN_ACTIONS", "0", float)
-        self.queue_maxsize = get_config("QUEUE_MAXSIZE", "1000", int)
+        self.queue_maxsize = get_config("EXECUTION_QUEUE_MAXSIZE", "1000", int)
+        self.action_subject = get_config("EXECUTION_ACTION_SUBJECT", "polaris.execution.actions")
 
         # Logging
         self.logger = setup_logging()
@@ -465,10 +466,9 @@ class SwimExecutionAdapter:
         # Subscribe
         try:
             assert self.nc is not None
-            await self.nc.subscribe("polaris.actions.swim_adapter", cb=self.action_handler)
-            await self.nc.subscribe("polaris.actions.swim", cb=self.action_handler)
+            await self.nc.subscribe(self.action_subject, cb=self.action_handler)
             self.logger.info("nats_subscribed", extra={
-                "subjects": ["polaris.actions.swim_adapter", "polaris.actions.swim"]
+                "subjects": [self.action_subject]
             })
         except Exception as e:
             self.logger.error("nats_subscribe_failed", extra={"error": str(e)})

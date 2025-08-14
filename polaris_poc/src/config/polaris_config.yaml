@@ -34,6 +34,7 @@ telemetry:
   stream: True   # Whether to stream the metrics in a continious indivisual packets ( along with batch ) 
 
 execution:
+  action_subject: 
   queue_maxsize: 1000       # execution adapter queue size
 
 logger:
