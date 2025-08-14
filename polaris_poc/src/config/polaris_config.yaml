@@ -1,44 +1,39 @@
-# Polaris Project Configuration
-# Grouped logically so that _flatten_dict will map them to uppercase env vars.
-# Example: swim.host -> SWIM_HOST
+# POLARIS framework configuration
+# Keys here are flattened to environment variables by the ConfigurationManager
+# (e.g. logger.name -> LOGGER_NAME). Keep only framework-level configurable
+# settings. System/plugin-specific settings belong in the plugin `config.yaml`.
 
 nats:
-  url: "nats://localhost:4222"
-
-swim:
-  host: "localhost"
-  port: 4242
-  cmd_timeout: 30.0
-  max_retries: 2
-  retry_base_delay: 1.0
-  retry_max_delay: 5.0
-  min_gap_between_actions: 0.0
-  metric_commands: >
-    dimmer,get_active_servers,get_max_servers,get_servers,
-    get_basic_rt,get_opt_rt,get_basic_throughput,
-    get_opt_throughput,get_arrival_rate
-  utilization_scan: true
-  utilization_prefix: "get_utilization server"
-  utilization_metric_name: "total_utilization"
-
-monitor:
-  interval: 5.0
-  metrics_concurrency: 1   # keep low because SWIM is single-threaded
+  url: "nats://localhost:4222"  # NATS server URL used by adapters (default)
 
 telemetry:
+  # Subject for streaming individual telemetry events (MonitorAdapter.publish)
   stream_subject: "polaris.telemetry.events.stream"
+  # Subject for batched telemetry events (MonitorAdapter.batch publish)
   batch_subject: "polaris.telemetry.events.batch"
+  # Maximum number of events per batch (send when reached)
   batch_size: 100
-  batch_max_wait: 1.0       # seconds to wait before sending incomplete batch
-  queue_maxsize: 5000       # 0 = unbounded
-  stream: True   # Whether to stream the metrics in a continious indivisual packets ( along with batch ) 
+  # Maximum wait (seconds) before sending an incomplete batch
+  batch_max_wait: 1.0
+  # Max queue size used by MonitorAdapter for in-memory buffering (0 = unbounded)
+  queue_maxsize: 5000
+  # If true, publish individual events immediately in addition to batching
+  stream: true
 
 execution:
-  action_subject: 
-  queue_maxsize: 1000       # execution adapter queue size
+  # NATS subject where control actions are expected (ExecutionAdapter listens)
+  # Default used by code is 'polaris.execution.actions' if omitted.
+  action_subject: "polaris.execution.actions"
+  # Subject where execution results are published (ExecutionAdapter uses this)
+  result_subject: "polaris.execution.results"
+  # Subject used to publish execution-related metrics
+  metrics_subject: "polaris.execution.metrics"
 
 logger:
-  name: "swim_adapter"
-  level: "INFO"
+  # Logger name used by the framework (becomes LOGGER_NAME env var)
+  name: "polaris"
+  # Logging level: DEBUG, INFO, WARNING, ERROR
+  level: "DEBUG"
+  # Format for logs: 'pretty' for colored human output, 'json' for structured logs
   format: "pretty"
 

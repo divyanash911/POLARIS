@@ -1,8 +1,6 @@
-nats-py
-asyncio-nats-client
-pydantic
-# langchain
-# langchain-google-genai
+# POLARIS REQUIREMNETS
+nats-py >= 2.0.0
+pydantic >= 2.0.0
 python-dotenv
-asyncio
-yaml
+jsonschema
+PyYAML

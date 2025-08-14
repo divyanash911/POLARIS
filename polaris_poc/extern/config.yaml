@@ -1,0 +1,180 @@
+# SWIM Managed System Plugin Configuration
+# This file defines the capabilities and interface of the SWIM system
+
+system_name: "swim"
+system_version: "1.0.0"
+
+# Implementation details
+implementation:
+  connector_class: "connector.SwimTCPConnector"
+  timeout: 30.0
+  max_retries: 2
+
+# Connection configuration
+connection:
+  protocol: "tcp"
+  host: "localhost"
+  port: 4242
+  auth:
+    type: "none"
+  ssl:
+    enabled: false
+
+# Monitoring configuration
+monitoring:
+  enabled: true
+  interval: 5.0
+  metrics:
+    - name: "dimmer"
+      command: "get_dimmer"
+      unit: "ratio"
+      type: "float"
+      description: "Current dimmer setting (QoS adjustment factor)"
+      category: "performance"
+    
+    - name: "active_servers"
+      command: "get_active_servers"
+      unit: "count"
+      type: "integer"
+      description: "Number of currently active servers"
+      category: "resource"
+    
+    - name: "max_servers"
+      command: "get_max_servers"
+      unit: "count"
+      type: "integer"
+      description: "Maximum number of servers allowed"
+      category: "resource"
+    
+    - name: "servers"
+      command: "get_servers"
+      unit: "count"
+      type: "integer"
+      description: "Total number of servers"
+      category: "resource"
+    
+    - name: "basic_response_time"
+      command: "get_basic_rt"
+      unit: "ms"
+      type: "float"
+      description: "Response time for basic service"
+      category: "performance"
+    
+    - name: "optional_response_time"
+      command: "get_opt_rt"
+      unit: "ms"
+      type: "float"
+      description: "Response time for optional service"
+      category: "performance"
+    
+    - name: "basic_throughput"
+      command: "get_basic_throughput"
+      unit: "req/s"
+      type: "float"
+      description: "Throughput for basic service"
+      category: "performance"
+    
+    - name: "optional_throughput"
+      command: "get_opt_throughput"
+      unit: "req/s"
+      type: "float"
+      description: "Throughput for optional service"
+      category: "performance"
+    
+    - name: "arrival_rate"
+      command: "get_arrival_rate"
+      unit: "req/s"
+      type: "float"
+      description: "Current request arrival rate"
+      category: "performance"
+  
+  derived_metrics:
+    - name: "average_response_time"
+      formula: "(basic_response_time * basic_throughput + optional_response_time * optional_throughput) / (basic_throughput + optional_throughput)"
+      unit: "ms"
+      description: "Weighted average response time"
+    
+    - name: "server_utilization"
+      formula: "active_servers / max_servers"
+      unit: "ratio"
+      description: "Server utilization ratio"
+  
+  strategies:
+    batch_collection: true
+    parallel_collection: false  # SWIM is single-threaded
+    max_concurrent: 1
+    error_handling: "fail"
+
+# Execution configuration
+execution:
+  enabled: true
+  actions:
+    - type: "ADD_SERVER"
+      command: "add_server"
+      description: "Add a new server to the pool"
+      parameters: []
+      preconditions:
+        - check: "get_servers < get_max_servers"
+          message: "Cannot add server: already at maximum capacity"
+      impact:
+        severity: "medium"
+        reversible: true
+        estimated_duration: 2.0
+    
+    - type: "REMOVE_SERVER"
+      command: "remove_server"
+      description: "Remove a server from the pool"
+      parameters: []
+      preconditions:
+        - check: "get_servers > 1"
+          message: "Cannot remove server: minimum of 1 server required"
+      impact:
+        severity: "medium"
+        reversible: true
+        estimated_duration: 2.0
+    
+    - type: "SET_DIMMER"
+      command: "set_dimmer {value}"
+      description: "Adjust QoS by setting dimmer value"
+      parameters:
+        - name: "value"
+          type: "float"
+          required: true
+          validation:
+            min: 0.0
+            max: 1.0
+      impact:
+        severity: "low"
+        reversible: true
+        estimated_duration: 0.5
+    
+    - type: "ADJUST_QOS"
+      command: "set_dimmer {value}"
+      description: "Alias for SET_DIMMER - adjust quality of service"
+      parameters:
+        - name: "value"
+          type: "float"
+          required: true
+          validation:
+            min: 0.0
+            max: 1.0
+      impact:
+        severity: "low"
+        reversible: true
+        estimated_duration: 0.5
+  
+  constraints:
+    min_interval: 0.0  # No minimum interval between actions
+    max_concurrent: 1  # SWIM is single-threaded, serialize actions
+    queue_size: 1000
+
+# Metadata
+metadata:
+  author: "CMU ABLE Team"
+  description: "SWIM (Simulated Web Infrastructure Manager) is a self-adaptive exemplar for experimenting with adaptation strategies"
+  documentation: "https://github.com/cps-sei/swim"
+  tags:
+    - "web-service"
+    - "self-adaptive"
+    - "exemplar"
+    - "simulation"
