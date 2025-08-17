@@ -3,6 +3,7 @@ venv/
 __pycache__/
 .pytest_cache/
 *.pyc
+polaris
 
 # Secrets
 .env
