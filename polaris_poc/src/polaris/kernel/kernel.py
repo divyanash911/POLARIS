@@ -4,38 +4,30 @@ import logging
 from polaris.common.nats_client import NATSClient
 from polaris.controllers.fast_controller import FastController
 
-class SWIMKernel:
-    def __init__(self, nats_url: str, logger: logging.Logger):
-        self.nats_client = NATSClient(nats_url=nats_url, logger=logger, name="SWIMKernel")
+# BaseKernel class
+class BaseKernel:
+    def __init__(self, nats_url: str, logger: logging.Logger, name: str):
+        self.nats_client = NATSClient(nats_url=nats_url, logger=logger, name=name)
         self.logger = logger
         self.running = False
-        self.fast_controller = FastController(self)
 
     async def start(self):
         """Start the kernel."""
-        self.logger.info("Starting SWIM Kernel")
+        self.logger.info(f"Starting {self.__class__.__name__}")
         await self.nats_client.connect()
         self.running = True
 
-        # Subscribe to telemetry events
-        await self.nats_client.subscribe("polaris.telemetry.events.batch", self.process_telemetry_event)
-
     async def stop(self):
         """Stop the kernel."""
-        self.logger.info("Stopping SWIM Kernel")
+        self.logger.info(f"Stopping {self.__class__.__name__}")
         self.running = False
         await self.nats_client.close()
 
     async def process_telemetry_event(self, msg):
-        """Process telemetry events received from SWIM."""
+        """Process telemetry events received from NATS."""
         try:
             telemetry_data = json.loads(msg.data.decode())
-            # self.logger.info(f"Received telemetry event - {telemetry_data}", extra={"data": telemetry_data})
-
-            # Example: Generate an action based on telemetry data
             action = self.generate_action(telemetry_data)
-
-            # Publish the action to NATS
             await self.nats_client.publish("polaris.execution.actions", json.dumps(action).encode())
             self.logger.info("Published action", extra={"action": action})
         except Exception as e:
@@ -43,9 +35,18 @@ class SWIMKernel:
 
     def generate_action(self, telemetry_data):
         """Generate an action based on telemetry data."""
-        # Example logic: Create a dummy action
-        action = self.fast_controller.decide_action(telemetry_data)
-        return action
+        raise NotImplementedError("Subclasses must implement this method.")
+
+# SWIMKernel class
+class SWIMKernel(BaseKernel):
+    def __init__(self, nats_url: str, logger: logging.Logger):
+        super().__init__(nats_url=nats_url, logger=logger, name="SWIMKernel")
+        self.fast_controller = FastController(self)
+
+    def generate_action(self, telemetry_data):
+        """Generate an action based on telemetry data."""
+        return self.fast_controller.decide_action(telemetry_data)
+
 # Example usage
 async def main():
     logger = logging.getLogger("SWIMKernel")
