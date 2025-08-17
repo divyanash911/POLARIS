@@ -11,25 +11,26 @@ POLARIS follows a clean separation between the **core framework** and **managed 
 - **Observability Tools**: Real-time monitoring and debugging utilities
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    POLARIS Framework                        │
-├─────────────────────────────────────────────────────────────┤
-│  Monitor Adapter    │    Execution Adapter    │   Tools     │
-│  ┌─────────────────┐│  ┌─────────────────────┐│  ┌─────────┐│
-│  │ Metric Collection││  │ Action Execution    ││  │NATS Spy ││
-│  │ Telemetry Batch ││  │ Result Publishing   ││  │Debugger ││
-│  │ NATS Publishing ││  │ Queue Management    ││  │Validator││
-│  └─────────────────┘│  └─────────────────────┘│  └─────────┘│
-├─────────────────────────────────────────────────────────────┤
-│                    Plugin Interface                         │
-├─────────────────────────────────────────────────────────────┤
-│  SWIM Plugin        │    Custom Plugin        │   Future    │
-│  ┌─────────────────┐│  ┌─────────────────────┐│  ┌─────────┐│
-│  │ TCP Connector   ││  │ HTTP Connector      ││  │   ...   ││
-│  │ Config Schema   ││  │ Config Schema       ││  │         ││
-│  │ Retry Logic     ││  │ Auth Handling       ││  │         ││
-│  └─────────────────┘│  └─────────────────────┘│  └─────────┘│
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           POLARIS Framework                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Monitor Adapter    │  Execution Adapter  │  Digital Twin    │   Tools      │
+│  ┌─────────────────┐│  ┌─────────────────┐│  ┌─────────────┐│  ┌─────────┐  │
+│  │ Metric Collection││  │ Action Execution││  │ NATS Ingestion│  │NATS Spy │  │
+│  │ Telemetry Batch ││  │ Result Publishing││  │ gRPC Service │  │Debugger │  │
+│  │ NATS Publishing ││  │ Queue Management││  │ World Model  │  │Validator│  │
+│  └─────────────────┘│  └─────────────────┘│  │ Query/Sim/Diag│  └─────────┘  │
+│                     │                     │  └─────────────┘│              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                            Plugin Interface                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  SWIM Plugin        │    Custom Plugin        │   Future    │              │
+│  ┌─────────────────┐│  ┌─────────────────────┐│  ┌─────────┐│              │
+│  │ TCP Connector   ││  │ HTTP Connector      ││  │   ...   ││              │
+│  │ Config Schema   ││  │ Config Schema       ││  │         ││              │
+│  │ Retry Logic     ││  │ Auth Handling       ││  │         ││              │
+│  └─────────────────┘│  └─────────────────────┘│  └─────────┘│              │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## 🚀 Quick Start
@@ -55,6 +56,9 @@ python src/scripts/start_component.py monitor --plugin-dir extern
 
 # Start execution adapter (in another terminal)
 python src/scripts/start_component.py execution --plugin-dir extern
+
+# Start Digital Twin (in another terminal)
+python src/scripts/start_component.py digital-twin
 ```
 
 ### Monitor NATS Messages
@@ -87,16 +91,33 @@ polaris_poc/
 │   │   │   ├── base.py         # Base classes and interfaces
 │   │   │   ├── monitor.py      # Generic monitor adapter
 │   │   │   └── execution.py    # Generic execution adapter
+│   │   ├── agents/              # Digital Twin agents
+│   │   │   └── digital_twin_agent.py  # Main Digital Twin agent
+│   │   ├── services/            # gRPC services
+│   │   │   └── digital_twin_service.py  # Digital Twin gRPC service
+│   │   ├── proto/               # Protocol buffer definitions
+│   │   │   ├── digital_twin.proto      # Digital Twin gRPC interface
+│   │   │   ├── digital_twin_pb2.py     # Generated protobuf code
+│   │   │   └── digital_twin_pb2_grpc.py
 │   │   ├── common/              # Shared utilities
 │   │   │   ├── config.py       # Configuration management
 │   │   │   ├── nats_client.py  # NATS communication
-│   │   │   └── logging_setup.py
+│   │   │   ├── digital_twin_config.py  # Digital Twin configuration
+│   │   │   └── digital_twin_logging.py # Digital Twin logging
 │   │   └── models/              # Data models
 │   │       ├── actions.py      # Control actions and results
-│   │       └── telemetry.py    # Telemetry events
+│   │       ├── telemetry.py    # Telemetry events
+│   │       ├── digital_twin_events.py  # Digital Twin events
+│   │       └── world_model.py  # World Model interface
 │   └── scripts/                 # Utility scripts
-│       ├── start_component.py  # Main entry point
+│       ├── start_component.py  # Adapter entry point
+│       ├── start_digital_twin.py  # Digital Twin entry point
 │       └── nats_spy.py         # NATS message monitor
+├── scripts/                     # Additional scripts
+│   ├── verify_digital_twin_integration.py  # Integration verification
+│   └── test_digital_twin_integration.py    # Comprehensive tests
+├── docs/                        # Documentation
+│   └── digital_twin_integration.md  # Digital Twin integration guide
 ├── test_adapters.py             # Integration tests
 └── requirements.txt
 ```
@@ -129,6 +150,15 @@ polaris_poc/
   - Concurrent execution control
   - Result publishing and metrics
   - Queue management with throttling
+
+### Digital Twin Component
+- **Purpose**: Provides intelligent system modeling and predictive capabilities
+- **Features**:
+  - **NATS Ingestion**: Automatically processes telemetry and execution events
+  - **gRPC Services**: Query, Simulation, Diagnosis, and Management APIs
+  - **World Model**: Pluggable AI/ML implementations (Mock, Gemini LLM, Statistical)
+  - **Real-time Processing**: Batch processing with configurable timeouts
+  - **Health Monitoring**: Comprehensive health checks and metrics
 
 ### Plugin System
 - **Purpose**: Encapsulates system-specific logic
@@ -254,12 +284,69 @@ The included SWIM plugin demonstrates a complete implementation:
 - `polaris.execution.actions` - Control actions to execute
 - `polaris.execution.results` - Action execution results
 - `polaris.execution.metrics` - Execution performance metrics
+- `polaris.digitaltwin.calibrate` - Model calibration feedback
+- `polaris.digitaltwin.errors` - Digital Twin error messages
 
 ### Message Flow
 ```
-Monitor Adapter → NATS → [Reasoning/Planning] → NATS → Execution Adapter
-     ↓                                                        ↓
-Telemetry Events                                    Action Results
+Monitor Adapter → NATS → Digital Twin → gRPC Clients
+     ↓              ↑         ↓
+Telemetry Events    │    World Model Updates
+                    │         ↓
+Execution Adapter ←─┘    Query/Simulation/Diagnosis
+     ↓
+Action Results → NATS → Digital Twin
+```
+
+### Digital Twin gRPC Services
+- **Query Service** (`:50051`): Current and historical system state queries
+- **Simulation Service**: Predictive "what-if" analysis and forecasting
+- **Diagnosis Service**: Root cause analysis and anomaly investigation
+- **Management Service**: Health checks, metrics, and lifecycle management
+
+## 🤖 Digital Twin Usage
+
+### Starting the Digital Twin
+```bash
+# Start with default configuration
+python start_component.py digital-twin --world-model mock
+
+# Health Check
+python start_component.py digital-twin --health-check
+```
+
+### gRPC Client Examples
+```python
+import grpc
+from polaris.proto import digital_twin_pb2, digital_twin_pb2_grpc
+
+# Connect to Digital Twin
+channel = grpc.insecure_channel('localhost:50051')
+stub = digital_twin_pb2_grpc.DigitalTwinStub(channel)
+
+# Query current system state
+query = digital_twin_pb2.QueryRequest(
+    query_type="current_state",
+    query_content="What is the current CPU usage?"
+)
+response = stub.Query(query)
+
+# Run simulation
+simulation = digital_twin_pb2.SimulationRequest(
+    simulation_type="what_if",
+    actions=[...],  # Define actions
+    horizon_minutes=60
+)
+sim_response = stub.Simulate(simulation)
+```
+
+### Integration Verification
+```bash
+# Verify Digital Twin integration
+python scripts/verify_digital_twin_integration.py
+
+# Run comprehensive integration tests
+python scripts/test_digital_twin_integration.py
 ```
 
 ## 🧪 Testing
@@ -269,21 +356,28 @@ Telemetry Events                                    Action Results
 # Run adapter tests
 python test_adapters.py
 
+# Test Digital Twin integration
+python scripts/test_digital_twin_integration.py
+
 # Test specific components
 python -m pytest tests/ -v
 ```
 
 ### Manual Testing
 ```bash
-# Start components
+# Start all components
 python src/scripts/start_component.py monitor --plugin-dir extern &
 python src/scripts/start_component.py execution --plugin-dir extern &
+python src/scripts/start_digital_twin.py &
 
 # Monitor messages
 python src/scripts/nats_spy.py --preset all
 
 # Send test action (requires NATS client)
 nats pub polaris.execution.actions '{"action_type":"SET_DIMMER","params":{"value":0.8}}'
+
+# Test Digital Twin gRPC
+grpcurl -plaintext localhost:50051 polaris.digitaltwin.DigitalTwin/Query
 ```
 
 ## 🔧 Configuration

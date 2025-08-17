@@ -2,8 +2,8 @@
 """
 Entry point script for starting POLARIS components.
 
-This script can launch monitor or execution adapters with a specified
-managed system plugin.
+This script can launch monitor, execution adapters with a specified
+managed system plugin, or the Digital Twin component.
 
 Examples:
     # Start monitor with SWIM plugin
@@ -12,6 +12,12 @@ Examples:
     # Start execution adapter with custom config
     python start_component.py execution --plugin-dir extern --config custom_config.yaml
 
+    # Start Digital Twin component
+    python start_component.py digital-twin
+
+    # Start Digital Twin with specific World Model
+    python start_component.py digital-twin --world-model gemini
+
     # Start with debug logging
     python start_component.py monitor --plugin-dir extern --log-level DEBUG
 """
@@ -19,34 +25,46 @@ Examples:
 import argparse
 import asyncio
 import logging
+import os
 import signal
 import sys
 from pathlib import Path
+from typing import Optional
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from polaris.adapters.monitor import MonitorAdapter
 from polaris.adapters.execution import ExecutionAdapter
+from polaris.agents.digital_twin_agent import DigitalTwinAgent
 from polaris.common.logging_setup import setup_logging
+from polaris.common.digital_twin_config import DigitalTwinConfigManager, DigitalTwinConfigError
+from polaris.common.digital_twin_logging import setup_digital_twin_logging
 
 
 async def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description="Start POLARIS adapter components"
+        description="Start POLARIS components",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s monitor --plugin-dir extern          # Start monitor adapter
+  %(prog)s execution --plugin-dir extern        # Start execution adapter
+  %(prog)s digital-twin                         # Start Digital Twin
+  %(prog)s digital-twin --world-model gemini    # Start Digital Twin with Gemini
+        """
     )
     
     parser.add_argument(
         "component",
-        choices=["monitor", "execution"],
+        choices=["monitor", "execution", "digital-twin"],
         help="Component to start"
     )
     
     parser.add_argument(
         "--plugin-dir",
-        required=True,
-        help="Directory containing the managed system plugin"
+        help="Directory containing the managed system plugin (required for monitor/execution)"
     )
     
     parser.add_argument(
@@ -71,25 +89,56 @@ async def main():
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Initialize adapter but don't start processing"
+        help="Initialize component but don't start processing"
+    )
+    
+    # Digital Twin specific arguments
+    parser.add_argument(
+        "--world-model",
+        choices=["mock", "gemini", "statistical", "hybrid"],
+        help="Override World Model implementation (Digital Twin only)"
+    )
+    
+    parser.add_argument(
+        "--health-check",
+        action="store_true",
+        help="Perform health check and exit (Digital Twin only)"
     )
     
     args = parser.parse_args()
     
+    # Validate arguments
+    if args.component in ["monitor", "execution"] and not args.plugin_dir:
+        parser.error(f"{args.component} component requires --plugin-dir")
+    
+    if args.component != "digital-twin" and (args.world_model or args.health_check):
+        parser.error("--world-model and --health-check are only valid for digital-twin component")
+    
+    # Resolve configuration path
+    config_path = Path(args.config).resolve()
+    if not config_path.exists():
+        print(f"Configuration file not found: {config_path}")
+        sys.exit(1)
+    
+    # Handle Digital Twin component
+    if args.component == "digital-twin":
+        await start_digital_twin(args, config_path)
+        return
+    
+    # Handle adapter components (monitor/execution)
+    await start_adapter(args, config_path)
+
+
+async def start_adapter(args, config_path: Path):
+    """Start monitor or execution adapter."""
     # Setup logging
     logger = setup_logging()
     logger.setLevel(getattr(logging, args.log_level))
     
-    # Resolve paths
+    # Resolve plugin directory
     plugin_dir = Path(args.plugin_dir).resolve()
-    config_path = Path(args.config).resolve()
-    
     if not plugin_dir.exists():
         logger.error(f"Plugin directory not found: {plugin_dir}")
-        sys.exit(1)
-    
-    if not config_path.exists():
-        logger.error(f"Configuration file not found: {config_path}")
         sys.exit(1)
     
     # Create adapter
@@ -163,6 +212,204 @@ async def main():
         sys.exit(1)
     
     logger.info(f"🛑 {args.component.capitalize()} adapter stopped")
+
+
+async def start_digital_twin(args, config_path: Path):
+    """Start Digital Twin component."""
+    # Setup basic logging for startup
+    # Setup logging
+    logger = setup_logging()
+    logger.setLevel(getattr(logging, args.log_level))
+    
+    try:
+        # Load Digital Twin configuration
+        logger.info(f"Loading Digital Twin configuration from {config_path}")
+        config_manager = DigitalTwinConfigManager(logger)
+        config = config_manager.load_configuration(str(config_path))
+        
+        # Apply World Model override if specified
+        if args.world_model:
+            dt_config = config["digital_twin"]
+            dt_config["world_model"]["implementation"] = args.world_model
+            logger.info(f"World Model implementation overridden to: {args.world_model}")
+        
+        # Log configuration summary
+        summary = config_manager.create_model_config_summary()
+        logger.info("Configuration loaded successfully:")
+        logger.info(f"  Implementation: {summary['implementation']}")
+        logger.info(f"  Available models: {summary['available_models']}")
+        logger.info(f"  gRPC port: {summary['grpc_port']}")
+        logger.info(f"  NATS subjects: {summary['nats_subjects']}")
+        
+        # Validate environment
+        logger.info("Validating environment...")
+        issues = []
+        
+        # Check World Model implementation requirements
+        dt_config = config["digital_twin"]
+        implementation = dt_config["world_model"]["implementation"]
+        
+        if implementation == "gemini":
+            # Check for Gemini API key
+            active_config = config_manager.get_active_model_config()
+            cfg = active_config.get("config", {}) if isinstance(active_config, dict) else {}
+            api_key_env = cfg.get("api_key_env", "GEMINI_API_KEY")
+            
+            if api_key_env not in os.environ:
+                issues.append(f"Gemini API key not found in environment variable: {api_key_env}")
+            
+            # Check for required packages
+            try:
+                import google.genai
+                logger.info("✅ Google Generative AI package available")
+            except ImportError:
+                issues.append("Google Generative AI package not installed (pip install google-genai)")
+            
+            try:
+                import langchain
+                logger.info("✅ LangChain package available")
+            except ImportError:
+                issues.append("LangChain package not installed (pip install langchain)")
+        
+        # Check gRPC port availability
+        grpc_config = config_manager.get_grpc_config()
+        grpc_port = grpc_config.get("port", 50051)
+        
+        try:
+            import socket
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                result = s.connect_ex(('localhost', grpc_port))
+                if result == 0:
+                    issues.append(f"gRPC port {grpc_port} is already in use")
+                else:
+                    logger.info(f"✅ gRPC port {grpc_port} is available")
+        except Exception as e:
+            logger.warning(f"Could not check gRPC port availability: {e}")
+        
+        # Report validation results
+        if issues:
+            logger.error("Environment validation failed:")
+            for issue in issues:
+                logger.error(f"  ❌ {issue}")
+            sys.exit(1)
+        else:
+            logger.info("✅ Environment validation passed")
+        
+        # Validation-only mode
+        if args.validate_only:
+            logger.info("✅ Configuration and environment validation passed")
+            logger.info("🏁 Validation complete - exiting")
+            return
+        
+        # Setup Digital Twin specific logging
+        dt_logger = setup_digital_twin_logging(config["digital_twin"])
+        
+        # Create Digital Twin agent
+        logger.info("Creating Digital Twin agent...")
+        agent = DigitalTwinAgent(
+            config_path=str(config_path),
+            logger=dt_logger.get_logger()
+        )
+        logger.info("✅ Digital Twin agent created successfully")
+        
+        # Health check mode
+        if args.health_check:
+            logger.info("Performing health check...")
+            try:
+                await agent.start()  # Start agent for health check
+                
+                # Check World Model health
+                world_model = agent.world_model
+                if world_model:
+                    health_status = await world_model.get_health_status()
+                    logger.info(f"World Model health: {health_status}")
+                    
+                    if health_status.get("status") != "healthy":
+                        logger.warning("World Model is not healthy")
+                        sys.exit(1)
+                
+                # Check NATS connection
+                if hasattr(agent, 'nats_client') and agent.nats_client:
+                    if agent.nats_client.is_connected:
+                        logger.info("✅ NATS connection is healthy")
+                    else:
+                        logger.warning("❌ NATS connection is not healthy")
+                        sys.exit(1)
+                
+                logger.info("✅ Health check passed")
+                return
+                
+            except Exception as e:
+                logger.error(f"❌ Health check failed: {e}")
+                sys.exit(1)
+            finally:
+                try:
+                    await agent.stop()
+                except Exception as e:
+                    logger.warning(f"Error during health check cleanup: {e}")
+        
+        # Dry run mode
+        if args.dry_run:
+            logger.info("🧪 Dry run mode - agent initialized but not started")
+            logger.info("🏁 Dry run complete - exiting")
+            return
+        
+        # Setup signal handling
+        stop_event = asyncio.Event()
+        
+        def signal_handler():
+            logger.info("Received shutdown signal")
+            stop_event.set()
+        
+        # Register signal handlers
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            try:
+                asyncio.get_running_loop().add_signal_handler(sig, signal_handler)
+            except NotImplementedError:
+                # Windows doesn't support add_signal_handler
+                signal.signal(sig, lambda *_: signal_handler())
+        
+        # Start Digital Twin agent
+        logger.info("🚀 Starting Digital Twin agent...")
+        
+        try:
+            await agent.start()
+            logger.info("✅ Digital Twin agent started successfully")
+            logger.info("📡 Digital Twin is running - press Ctrl+C to stop")
+            
+            # Log service endpoints
+            grpc_host = grpc_config.get("host", "0.0.0.0")
+            grpc_port = grpc_config.get("port", 50051)
+            logger.info(f"🌐 gRPC service available at {grpc_host}:{grpc_port}")
+            
+            nats_config = config_manager.get_nats_config()
+            calibrate_subject = nats_config.get("calibrate_subject")
+            logger.info(f"📨 NATS listening on telemetry/execution streams and calibrate subject: {calibrate_subject}")
+            
+            # Wait for shutdown signal
+            await stop_event.wait()
+            
+        except Exception as e:
+            logger.error(f"❌ Digital Twin agent error: {e}")
+            raise
+        finally:
+            # Shutdown agent
+            logger.info("🛑 Shutting down Digital Twin agent...")
+            try:
+                await agent.stop()
+                logger.info("✅ Digital Twin agent stopped cleanly")
+            except Exception as e:
+                logger.error(f"Error during shutdown: {e}")
+         
+    except DigitalTwinConfigError as e:
+        logger.error(f"❌ Configuration error: {e}")        
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"❌ Unexpected error: {e}")
+        if args.log_level == "DEBUG":
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
 
 
 if __name__ == "__main__":

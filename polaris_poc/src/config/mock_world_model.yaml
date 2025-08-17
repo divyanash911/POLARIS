@@ -1,0 +1,49 @@
+# =============================================================================
+# POLARIS World Model Configuration: Mock Implementation
+# =============================================================================
+# This file defines the configuration for the 'mock' World Model.
+# It returns predefined responses and is ideal for development and testing.
+
+implementation: "mock"
+
+reload_on_failure: true
+health_check_interval_sec: 60
+
+# Implementation-specific settings for the 'mock' model.
+config:
+  # --- Mock World Model - Development and Testing ---
+  # Use Cases: Local development, automated testing, CI/CD pipelines.
+  # Performance: Fast and deterministic with no external dependencies.
+  enabled: true
+  description: "Simple mock implementation for testing and development"
+
+  # Simulated response delay to mimic real model processing time.
+  # Set to 0-10ms for fast test execution.
+  response_delay_ms: 100
+
+  # Default confidence level for all mock responses (0.0 to 1.0).
+  default_confidence: 0.85
+
+  # Predefined responses for different World Model operations.
+  # Customize these to match your specific testing scenarios.
+  responses:
+    # Responses for system state queries.
+    query:
+      current_state: "System is operating normally with mock data"
+      historical: "Historical data shows normal operation patterns"
+      natural_language: "Based on mock analysis, the system appears healthy"
+    
+    # Responses for future state simulations.
+    simulation:
+      default_message: "Mock simulation completed successfully"
+      future_states_count: 3
+
+    # Responses for system diagnosis and root cause analysis.
+    diagnosis:
+      default_hypotheses:
+        - hypothesis: "Normal system operation"
+          probability: 0.9
+          reasoning: "All metrics within expected ranges"
+        - hypothesis: "Minor performance variation"
+          probability: 0.1
+          reasoning: "Slight deviation in response times"

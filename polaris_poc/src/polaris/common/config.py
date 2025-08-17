@@ -1,5 +1,5 @@
 """
-Enhanced configuration management for POLARIS framework.
+Configuration management for POLARIS framework.
 
 Provides configuration loading, validation, and management for both
 the core framework and managed system plugins.
@@ -13,12 +13,10 @@ from typing import Any, Dict, List, Optional, Union
 
 from dotenv import load_dotenv
 import yaml
-try:
-    from jsonschema import validate, ValidationError
-    JSONSCHEMA_AVAILABLE = True
-except ImportError:
-    JSONSCHEMA_AVAILABLE = False
-    ValidationError = Exception
+
+# Import validation capabilities
+from .validation import ConfigurationValidator
+from .validation_result import ValidationResult, ValidationSeverity
 
 logger = logging.getLogger(__name__)
 
@@ -170,10 +168,11 @@ def get_config(key: str, default: Any = None, cast_type: type = str):
 
 
 class ConfigurationManager:
-    """Enhanced configuration manager with schema validation support.
+    """Configuration manager with comprehensive validation support.
     
     This class manages both POLARIS framework configuration and
-    managed system plugin configurations with JSON schema validation.
+    managed system plugin configurations with JSON schema validation
+    and comprehensive error reporting.
     """
     
     def __init__(self, logger: Optional[logging.Logger] = None):
@@ -187,16 +186,28 @@ class ConfigurationManager:
         self.plugin_config: Dict[str, Any] = {}
         self.schema: Optional[Dict[str, Any]] = None
         
+        # Initialize validator
+        try:
+            self.validator = ConfigurationValidator(self.logger)
+            self.logger.info("Configuration validation capabilities enabled")
+        except ImportError as e:
+            self.logger.error(f"Failed to initialize validator: {e}")
+            raise
+        
     def load_framework_config(
         self,
         config_path: Union[str, Path],
-        required_keys: Optional[List[str]] = None
+        required_keys: Optional[List[str]] = None,
+        validate_config: bool = True,
+        schema_path: Optional[Union[str, Path]] = None
     ) -> Dict[str, Any]:
-        """Load POLARIS framework configuration.
+        """Load POLARIS framework configuration with comprehensive validation.
         
         Args:
             config_path: Path to framework configuration file
             required_keys: List of required configuration keys
+            validate_config: Whether to perform validation
+            schema_path: Path to schema file for validation
             
         Returns:
             Loaded configuration dictionary
@@ -209,12 +220,41 @@ class ConfigurationManager:
         if not config_path.exists():
             raise ValueError(f"Configuration file not found: {config_path}")
         
+        # Perform validation
+        if validate_config:
+            try:
+                validation_result = self.validator.validate_config_file(
+                    config_path=config_path,
+                    schema_path=schema_path,
+                    config_type="framework"
+                )
+                
+                # Log validation results
+                if validation_result.valid:
+                    if validation_result.warnings or validation_result.infos:
+                        self.logger.info(
+                            f"Framework configuration validation passed with {len(validation_result.warnings)} warnings "
+                            f"and {len(validation_result.infos)} suggestions"
+                        )
+                        # Log detailed validation report in debug mode
+                        self.logger.debug(f"Validation report:\n{validation_result.format_report()}")
+                else:
+                    error_msg = f"Framework configuration validation failed with {len(validation_result.errors)} errors"
+                    self.logger.error(error_msg)
+                    self.logger.error(f"Validation report:\n{validation_result.format_report()}")
+                    raise ValueError(f"Configuration validation failed: {error_msg}")
+                    
+            except Exception as e:
+                if isinstance(e, ValueError):
+                    raise  # Re-raise validation errors
+                self.logger.warning(f"Validation failed: {e}")
+        
         # Load configuration based on file type
         if config_path.suffix in ['.yaml', '.yml']:
-            with open(config_path, 'r') as f:
+            with open(config_path, 'r', encoding='utf-8') as f:
                 self.framework_config = yaml.safe_load(f) or {}
         elif config_path.suffix == '.json':
-            with open(config_path, 'r') as f:
+            with open(config_path, 'r', encoding='utf-8') as f:
                 self.framework_config = json.load(f)
         else:
             raise ValueError(f"Unsupported config file type: {config_path.suffix}")
@@ -230,8 +270,11 @@ class ConfigurationManager:
         _set_env_vars(flat_config, overwrite=True)
         
         self.logger.info(
-            "Framework configuration loaded",
-            extra={"config_path": str(config_path)}
+            "Framework configuration loaded successfully",
+            extra={
+                "config_path": str(config_path),
+                "validation_enabled": validate_config
+            }
         )
         
         return self.framework_config
@@ -267,7 +310,8 @@ class ConfigurationManager:
         self,
         plugin_dir: Union[str, Path],
         config_filename: str = "config.yaml",
-        validate: bool = True
+        validate: bool = True,
+        schema_path: Optional[Union[str, Path]] = None
     ) -> Dict[str, Any]:
         """Load and validate managed system plugin configuration.
         
@@ -275,6 +319,7 @@ class ConfigurationManager:
             plugin_dir: Directory containing the plugin
             config_filename: Name of the configuration file
             validate: Whether to validate against schema
+            schema_path: Path to schema file for validation
             
         Returns:
             Loaded and validated plugin configuration
@@ -288,25 +333,50 @@ class ConfigurationManager:
         if not config_path.exists():
             raise ValueError(f"Plugin configuration not found: {config_path}")
         
+        # Perform validation
+        if validate:
+            try:
+                validation_result = self.validator.validate_config_file(
+                    config_path=config_path,
+                    schema_path=schema_path or self._find_plugin_schema_path(plugin_dir),
+                    config_type="plugin"
+                )
+                
+                # Log validation results
+                if validation_result.valid:
+                    if validation_result.warnings or validation_result.infos:
+                        self.logger.info(
+                            f"Plugin configuration validation passed with {len(validation_result.warnings)} warnings "
+                            f"and {len(validation_result.infos)} suggestions"
+                        )
+                        self.logger.debug(f"Validation report:\n{validation_result.format_report()}")
+                else:
+                    error_msg = f"Plugin configuration validation failed with {len(validation_result.errors)} errors"
+                    self.logger.error(error_msg)
+                    self.logger.error(f"Validation report:\n{validation_result.format_report()}")
+                    raise ValueError(f"Configuration validation failed: {error_msg}")
+                    
+            except Exception as e:
+                if isinstance(e, ValueError):
+                    raise  # Re-raise validation errors
+                self.logger.warning(f"Validation failed: {e}")
+        
         # Load configuration
         if config_path.suffix in ['.yaml', '.yml']:
-            with open(config_path, 'r') as f:
+            with open(config_path, 'r', encoding='utf-8') as f:
                 self.plugin_config = yaml.safe_load(f) or {}
         elif config_path.suffix == '.json':
-            with open(config_path, 'r') as f:
+            with open(config_path, 'r', encoding='utf-8') as f:
                 self.plugin_config = json.load(f)
         else:
             raise ValueError(f"Unsupported config file type: {config_path.suffix}")
         
-        # Validate against schema if requested
-        if validate and self.schema:
-            self.validate_config(self.plugin_config, self.schema)
-        
         self.logger.info(
-            "Plugin configuration loaded",
+            "Plugin configuration loaded successfully",
             extra={
                 "plugin_dir": str(plugin_dir),
-                "system_name": self.plugin_config.get("system_name", "unknown")
+                "system_name": self.plugin_config.get("system_name", "unknown"),
+                "validation_enabled": validate
             }
         )
         
@@ -316,41 +386,29 @@ class ConfigurationManager:
         self,
         config: Dict[str, Any],
         schema: Optional[Dict[str, Any]] = None
-    ) -> None:
-        """Validate configuration against JSON schema.
+    ) -> ValidationResult:
+        """Validate configuration dictionary.
         
         Args:
             config: Configuration dictionary to validate
             schema: JSON schema (uses self.schema if not provided)
             
+        Returns:
+            ValidationResult with validation information
+            
         Raises:
-            ValidationError: If configuration doesn't match schema
-            ValueError: If jsonschema is not available
+            ValueError: If validation fails with errors
         """
-        if not JSONSCHEMA_AVAILABLE:
-            self.logger.warning(
-                "jsonschema not available, skipping validation. "
-                "Install with: pip install jsonschema"
-            )
-            return
+        result = self.validator.validate_config_dict(
+            config=config,
+            schema=schema or self.schema,
+            config_type="unknown"
+        )
         
-        schema = schema or self.schema
-        if not schema:
-            raise ValueError("No schema available for validation")
+        if not result.valid:
+            raise ValueError(f"Configuration validation failed with {len(result.errors)} errors")
         
-        try:
-            validate(instance=config, schema=schema)
-            self.logger.info("Configuration validation successful")
-        except ValidationError as e:
-            self.logger.error(
-                "Configuration validation failed",
-                extra={
-                    "error": str(e),
-                    "path": list(e.path) if e.path else None,
-                    "message": e.message
-                }
-            )
-            raise
+        return result
     
     def get_plugin_connector_class(self) -> str:
         """Get the connector class path from plugin configuration.
@@ -409,3 +467,137 @@ class ConfigurationManager:
         for config in configs:
             result.update(config)
         return result
+    
+    def validate_configuration_dict(
+        self,
+        config: Dict[str, Any],
+        config_type: str = "unknown",
+        schema: Optional[Dict[str, Any]] = None
+    ) -> ValidationResult:
+        """Validate a configuration dictionary.
+        
+        Args:
+            config: Configuration dictionary to validate
+            config_type: Type of configuration (framework, world_model, plugin)
+            schema: Optional schema for validation
+            
+        Returns:
+            ValidationResult with validation information
+        """
+        result = self.validator.validate_config_dict(
+            config=config,
+            schema=schema,
+            config_type=config_type
+        )
+        
+        # Log validation results
+        if result.valid:
+            if result.warnings or result.infos:
+                self.logger.info(
+                    f"Configuration validation passed with {len(result.warnings)} warnings "
+                    f"and {len(result.infos)} suggestions"
+                )
+        else:
+            self.logger.warning(
+                f"Configuration validation failed with {len(result.errors)} errors"
+            )
+        
+        return result
+    
+    def get_validation_report(
+        self,
+        config_path: Union[str, Path],
+        config_type: str = "unknown",
+        schema_path: Optional[Union[str, Path]] = None,
+        output_format: str = "text"
+    ) -> str:
+        """Get a detailed validation report for a configuration file.
+        
+        Args:
+            config_path: Path to configuration file
+            config_type: Type of configuration
+            schema_path: Path to schema file
+            output_format: Output format ('text' or 'json')
+            
+        Returns:
+            Formatted validation report
+        """
+        try:
+            result = self.validator.validate_config_file(
+                config_path=config_path,
+                schema_path=schema_path,
+                config_type=config_type
+            )
+            
+            if output_format == "json":
+                return result.format_json_report()
+            else:
+                return result.format_report()
+                
+        except Exception as e:
+            self.logger.error(f"Failed to generate validation report: {e}")
+            return f"Failed to generate validation report: {str(e)}"
+    
+    def validate_multiple_configs(
+        self,
+        config_files: List[Dict[str, Union[str, Path]]],
+        stop_on_first_error: bool = False
+    ) -> str:
+        """Validate multiple configuration files and return a summary report.
+        
+        Args:
+            config_files: List of config file specifications
+            stop_on_first_error: Whether to stop on first validation error
+            
+        Returns:
+            Multi-file validation report
+        """
+        try:
+            multi_result = self.validator.validate_multiple_files(
+                file_configs=config_files,
+                stop_on_first_error=stop_on_first_error
+            )
+            
+            return multi_result.format_report()
+            
+        except Exception as e:
+            self.logger.error(f"Failed to validate multiple configurations: {e}")
+            return f"Failed to validate multiple configurations: {str(e)}"
+    
+
+    
+    def _find_plugin_schema_path(self, plugin_dir: Path) -> Optional[Path]:
+        """Find schema file for plugin configuration.
+        
+        Args:
+            plugin_dir: Plugin directory path
+            
+        Returns:
+            Path to schema file if found
+        """
+        # Common schema file locations and names
+        schema_locations = [
+            plugin_dir / "schema.json",
+            plugin_dir / "config.schema.json",
+            plugin_dir / "managed_system.schema.json",
+            plugin_dir.parent / "schemas" / "managed_system.schema.json",
+            Path(__file__).parent.parent / "config" / "managed_system.schema.json"
+        ]
+        
+        for schema_path in schema_locations:
+            if schema_path.exists():
+                return schema_path
+        
+        return None
+    
+    def get_validation_status(self) -> Dict[str, Any]:
+        """Get status information about validation capabilities.
+        
+        Returns:
+            Dictionary with validation status information
+        """
+        return {
+            "validation_available": True,
+            "validator_initialized": self.validator is not None,
+            "validator_type": "ConfigurationValidator"
+        }

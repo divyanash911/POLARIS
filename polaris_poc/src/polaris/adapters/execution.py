@@ -80,8 +80,12 @@ class ExecutionAdapter(BaseAdapter):
         self.action_subject = execution_framework_config.get(
             "action_subject", "polaris.execution.actions"
         )
-        self.result_subject = "polaris.execution.results"
-        self.metrics_subject = "polaris.execution.metrics"
+        self.result_subject = execution_framework_config.get(
+            "result_subject", "polaris.execution.results"
+        )
+        self.metrics_subject = execution_framework_config.get(
+            "metrics_subject", "polaris.execution.metrics"
+        )
         
         # Runtime state
         self.action_queue: asyncio.Queue[ControlAction] = asyncio.Queue(
