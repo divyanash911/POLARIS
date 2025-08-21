@@ -11,7 +11,7 @@ from polaris.common.config import load_config, get_config
 load_config(
     search_paths=[
         Path(
-            "/home/vyakhya/Desktop/serc/self_adapt/POLARIS/polaris_poc/src/config/polaris_config.yaml"
+            "/home/divyansh/serc/POLARIS/polaris_poc/src/config/polaris_config.yaml"
         )
     ],
     required_keys=["LOGGER_NAME", "LOGGER_LEVEL", "LOGGER_FORMAT"],

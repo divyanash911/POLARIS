@@ -563,7 +563,7 @@ class ExecutionAdapter(BaseAdapter):
             
         except Exception as e:
             self.logger.error(
-                "Failed to parse action message",
+                f"Failed to parse action message {action_data}",
                 extra={
                     "error": str(e),
                     "raw_data": msg.data[:256].decode(errors="replace")
