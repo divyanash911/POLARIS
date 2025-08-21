@@ -1,5 +1,6 @@
 import logging
 import json
+import os
 from pathlib import Path
 import sys
 from datetime import datetime, timezone
@@ -8,10 +9,13 @@ from enum import Enum
 
 from polaris.common.config import load_config, get_config
 
+
+path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../config/polaris_config.yaml")
+
 load_config(
     search_paths=[
         Path(
-            "/home/divyansh/serc/POLARIS/polaris_poc/src/config/polaris_config.yaml"
+            path
         )
     ],
     required_keys=["LOGGER_NAME", "LOGGER_LEVEL", "LOGGER_FORMAT"],

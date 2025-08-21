@@ -21,11 +21,6 @@ from polaris.models.digital_twin_events import KnowledgeEvent
 from polaris.models.world_model import QueryRequest
 from polaris.models.telemetry import TelemetryEvent
 
-dotenv.load_dotenv(
-    Path("/home/vyakhya/Desktop/serc/self_adapt/POLARIS/polaris_poc/.env")
-)
-
-
 class TestEnhancedStateTracking:
     """Test suite for enhanced state tracking functionality."""
 
