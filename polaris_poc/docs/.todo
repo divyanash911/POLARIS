@@ -1,0 +1,5 @@
+- Add reasoner, verification, meta-adapter interface
+- modify the start component to spin up all components
+- baseline swin adaptation
+- start ablation implementation tests
+- decide conference
