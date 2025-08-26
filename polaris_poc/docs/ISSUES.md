@@ -10,13 +10,8 @@ This document outlines the issues and potential improvements identified during t
   - No circuit breaker pattern for repeated failures
   - Missing retry logic for NATS message publishing
 
-### 2. Configuration Management
-- **File**: `src/polaris/common/config.py`
-  - Validation exists (JSON schema via `ConfigurationValidator`), but required keys are not standardized across components
-  - Env and YAML/JSON loading and env var propagation exist; lacking documentation of canonical keys and precedence rules
-  - Some components bypass or underutilize config validation; enforce consistent validation on startup
 
-### 3. Testing Coverage
+### 2. Testing Coverage
 - **Directory**: `tests/`
   - Incomplete test coverage for core components
   - Missing integration tests for adapter workflows
@@ -32,36 +27,35 @@ This document outlines the issues and potential improvements identified during t
 - No architectural decision records (ADRs)
 - Incomplete docstrings in many modules
 
-### 2. Performance Considerations
+### 3. Performance Considerations
 - **File**: `src/polaris/adapters/monitor.py`
   - Potential memory leak in telemetry queue handling
   - No backpressure handling for slow consumers
   - Inefficient batch processing implementation
   - Duplicate batching/queue patterns vs `ExecutionAdapter` that could be unified for performance and maintainability
 
-### 3. Security
+### 4. Security
 - No authentication/authorization for gRPC endpoints
 - Sensitive configuration parameters not encrypted
 - Missing input validation in several API endpoints
 
 ## Low Priority Issues
 
-### 1. Code Organization
+### 1. Development Experience
 - Inconsistent module organization
 - Some circular imports between modules
 - Mixed concerns in several classes
 
-### 2. Logging and Observability
+### 2. Code Quality
 - Inconsistent log levels
 - Missing structured logging in some components
 - No distributed tracing implementation
 
-### 3. Development Experience
+### 3. Logging and Observability
 - No pre-commit hooks
 - Missing editor configuration files
 - Inconsistent code formatting
 
-### 4. Minor Quality Issues
 - Redundant imports (e.g., `re` imported both at module top and inside functions)
 - Inconsistent typing in some message parsing paths
 
@@ -69,7 +63,6 @@ This document outlines the issues and potential improvements identified during t
 
 1. **Immediate Actions**
    - Implement comprehensive error handling and recovery
-   - Add input validation and configuration validation
    - Improve test coverage for critical paths
 
 2. **Short-term Improvements**
@@ -101,8 +94,6 @@ This document outlines the issues and potential improvements identified during t
 - **LOG-STR-005 (Medium)**: Introduce structured logging helpers.
   - Provide a `ContextLogger` or helper to attach `action_id`, `cycle_id`, `component`, etc., consistently.
 
-- **CONF-DOC-006 (Medium)**: Document configuration keys and precedence.
-  - README section and inline docs for env var names (flattened with underscores), YAML structure, and override order.
 
 - **GRACE-007 (Medium)**: Standardize graceful shutdown across components.
   - Ensure consistent queue draining and task cancellation semantics in kernel and adapters.
@@ -112,19 +103,17 @@ This document outlines the issues and potential improvements identified during t
 | ID | Component | Description | Priority | Status |
 |----|-----------|-------------|----------|--------|
 | KERN-001 | Kernel | Add circuit breaker pattern | High | Open |
-| CONF-001 | Config | Enforce standardized required keys/validation across components | High | Open |
 | TEST-001 | Tests | Improve coverage | High | Open |
-| DOC-001 | Documentation | Add API docs | Medium | Open |
+| DOC-001 | Documentation | Add API docs and ADRs | Medium | Open |
 | PERF-001 | Monitor | Memory optimization | Medium | Open |
-| SEC-001 | Security | Add auth | High | Open |
-| DEV-001 | DevEx | Add pre-commit | Low | Open |
-| ADAPT-DRY-001 | Adapters | Unify batching/queue/worker patterns | High | Open |
-| NATS-RES-004 | NATS | Centralize retry/backoff/confirmations | High | Open |
-| ADAPT-VAL-002 | Adapters | Centralize validation/coercion | Medium | Open |
-| ADAPT-EXPR-003 | Common | Shared expression evaluator | Medium | Open |
-| LOG-STR-005 | Logging | Structured logging helper | Medium | Open |
-| CONF-DOC-006 | Config | Document keys and precedence | Medium | Open |
-| GRACE-007 | Runtime | Standardize graceful shutdown | Medium | Open |
+| SEC-001 | Security | Add authentication | High | Open |
+| DEV-001 | DevEx | Set up pre-commit and editor config | Low | Open |
+| ADAPT-001 | Adapters | Unify batching/queue/worker patterns | High | Open |
+| NATS-001 | NATS | Centralize retry/backoff/confirmations | High | Open |
+| ADAPT-002 | Adapters | Centralize validation/coercion | Medium | Open |
+| CORE-001 | Common | Shared expression evaluator | Medium | Open |
+| LOG-001 | Logging | Structured logging helper | Medium | Open |
+| RUNTIME-001 | Runtime | Standardize graceful shutdown | Medium | Open |
 
 
 ---
