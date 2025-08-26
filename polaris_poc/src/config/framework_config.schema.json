@@ -112,8 +112,13 @@
         "nats": {
           "type": "object",
           "description": "NATS configuration for Digital Twin",
-          "required": ["calibrate_subject", "error_subject", "queue_group"],
+          "required": ["update_subject", "calibrate_subject", "error_subject", "queue_group"],
           "properties": {
+            "update_subject": {
+              "type": "string",
+              "description": "Subject for publishing update commands to Digital Twin",
+              "default": "polaris.digitaltwin.update"
+            },
             "calibrate_subject": {
               "type": "string",
               "description": "Subject for model calibration feedback",

@@ -102,6 +102,61 @@ config:
       - Include confidence levels for your assessments
       Always consider system safety and stability in your recommendations.
 
+# Environment variable overrides for different deployment environments
+# Values here will override the configuration above when the corresponding
+# environment variable is set to 'true' (case-insensitive).
+env_overrides:
+  # Development environment overrides (LOCAL_DEV=true)
+  LOCAL_DEV:
+    config:
+      model: "gemini-1.5-flash"  # Use faster, cheaper model in dev
+      temperature: 0.3  # More deterministic responses
+      max_tokens: 1024  # Shorter responses
+      concurrent_requests: 2  # Lower concurrency
+      request_timeout_sec: 10  # Shorter timeouts
+      retry_attempts: 2  # Fewer retries
+      langchain:
+        verbose: true  # Enable verbose logging in dev
+
+  # Test environment overrides (TEST_ENV=true)
+  TEST_ENV:
+    config:
+      temperature: 0.1  # Very deterministic for consistent tests
+      max_tokens: 512  # Shorter responses for testing
+      concurrent_requests: 1  # Sequential processing
+      retry_attempts: 1  # Fail fast in tests
+      prompts:
+        system_prompt: |
+          [TEST MODE] You are in a test environment. Provide concise, deterministic responses.
+          Focus on validating system behavior rather than comprehensive analysis.
+
+  # Staging environment overrides (STAGING=true)
+  STAGING:
+    config:
+      temperature: 0.5  # Balanced creativity for staging
+      max_tokens: 2048  # Full response length
+      concurrent_requests: 3  # Moderate concurrency
+      request_timeout_sec: 45  # More generous timeout
+      retry_attempts: 3  # Standard retries
+      prompts:
+        system_prompt: |
+          [STAGING] You are in a staging environment. Provide detailed analysis
+          but note this is not production. Be cautious with recommendations.
+
+  # Production environment overrides (PRODUCTION=true)
+  PRODUCTION:
+    config:
+      temperature: 0.7  # Default creative setting
+      max_tokens: 2048  # Full response length
+      concurrent_requests: 5  # Higher concurrency
+      request_timeout_sec: 30  # Balanced timeout
+      retry_attempts: 3  # Standard retries
+      prompts:
+        system_prompt: |
+          [PRODUCTION] You are in a production environment. Provide accurate,
+          reliable analysis with safety as the top priority. Be explicit about
+          confidence levels and potential risks in your recommendations.
+
     # Template for general system queries and state analysis.
     query_prompt: |
       Based on the following system information, answer this query: {query}

@@ -270,22 +270,61 @@ class DigitalTwinConfigManager:
         
         # Validate NATS configuration
         nats_config = dt_config["nats"]
-        required_nats_fields = ["update_subject", "calibrate_subject", "error_subject"]
+        required_nats_fields = ["update_subject", "calibrate_subject", "error_subject", "queue_group"]
         for field in required_nats_fields:
             if field not in nats_config:
                 raise DigitalTwinConfigError(f"Missing required NATS field: {field}")
         
         # Validate gRPC configuration
         grpc_config = dt_config["grpc"]
+        # Host presence and type
+        if "host" not in grpc_config:
+            raise DigitalTwinConfigError("Missing required gRPC host")
+        if not isinstance(grpc_config["host"], str) or not grpc_config["host"].strip():
+            raise DigitalTwinConfigError("Invalid gRPC host: must be a non-empty string")
+
+        # Port presence and range
         if "port" not in grpc_config:
             raise DigitalTwinConfigError("Missing required gRPC port")
-        
         try:
             port = int(grpc_config["port"])
             if port < 1 or port > 65535:
                 raise DigitalTwinConfigError(f"Invalid gRPC port: {port}")
         except (ValueError, TypeError) as e:
             raise DigitalTwinConfigError(f"Invalid gRPC port value: {grpc_config['port']}") from e
+
+        # Optional numeric bounds aligned with schema
+        if "max_workers" in grpc_config:
+            try:
+                mw = int(grpc_config["max_workers"])
+                if mw < 1:
+                    raise DigitalTwinConfigError("gRPC max_workers must be >= 1")
+            except (ValueError, TypeError) as e:
+                raise DigitalTwinConfigError("gRPC max_workers must be an integer") from e
+
+        if "max_message_size" in grpc_config:
+            try:
+                mms = int(grpc_config["max_message_size"])
+                if mms < 1024:
+                    raise DigitalTwinConfigError("gRPC max_message_size must be >= 1024 bytes")
+            except (ValueError, TypeError) as e:
+                raise DigitalTwinConfigError("gRPC max_message_size must be an integer") from e
+
+        if "keepalive_time_ms" in grpc_config:
+            try:
+                kat = int(grpc_config["keepalive_time_ms"])
+                if kat < 1000:
+                    raise DigitalTwinConfigError("gRPC keepalive_time_ms must be >= 1000")
+            except (ValueError, TypeError) as e:
+                raise DigitalTwinConfigError("gRPC keepalive_time_ms must be an integer") from e
+
+        if "keepalive_timeout_ms" in grpc_config:
+            try:
+                kao = int(grpc_config["keepalive_timeout_ms"])
+                if kao < 1000:
+                    raise DigitalTwinConfigError("gRPC keepalive_timeout_ms must be >= 1000")
+            except (ValueError, TypeError) as e:
+                raise DigitalTwinConfigError("gRPC keepalive_timeout_ms must be an integer") from e
         
         # Validate World Model configuration
         wm_config = dt_config["world_model"]

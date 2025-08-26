@@ -55,6 +55,11 @@ class ConfigurationValidator:
                 "Install with: pip install jsonschema"
             )
     
+    def _get_default_schema_path(self, config_type: str) -> Optional[Path]:
+        """Get default schema path based on configuration type."""
+        schema_path = Path(__file__).parent.parent / "config" / f"{config_type}_config.schema.json"
+        return schema_path if schema_path.exists() else None
+
     def validate_config_file(
         self,
         config_path: Union[str, Path],
@@ -110,9 +115,13 @@ class ConfigurationValidator:
             ))
             return result
         
-        # Schema validation
-        if schema_path:
-            schema_result = self._validate_against_schema(config, schema_path, str(config_path))
+        # Schema validation (with auto-discovery if schema_path not supplied)
+        resolved_schema_path = schema_path
+        if not resolved_schema_path:
+            resolved_schema_path = self._get_default_schema_path(config_type)
+
+        if resolved_schema_path:
+            schema_result = self._validate_against_schema(config, resolved_schema_path, str(config_path))
             result.add_issues(schema_result.issues)
         
         # Context-specific validation
@@ -380,17 +389,30 @@ class ConfigurationValidator:
     def _validate_world_model_config(self, config: Dict[str, Any], config_path: str) -> List[ValidationIssue]:
         """Validate world model-specific configuration rules."""
         issues = []
-        
-        # Validate Gemini configuration if present
-        if "gemini" in config:
-            gemini_config = config["gemini"]
-            
+
+        # World model YAMLs use a common shape:
+        # implementation: <impl>
+        # config: { ... }
+        implementation = config.get("implementation")
+        cfg = config.get("config", {}) if isinstance(config.get("config"), dict) else {}
+
+        # Validate Gemini configuration when selected
+        if implementation == "gemini":
             # Check API key environment variable
-            if "api_key_env" in gemini_config:
-                api_key_env = gemini_config["api_key_env"]
-                if api_key_env not in os.environ:
-                    suggestions, examples = self._suggestion_db.get_suggestions_for_error(
-                        field_path="gemini.api_key_env",
+            if "api_key_env" in cfg:
+                api_key_env = cfg["api_key_env"]
+                if not isinstance(api_key_env, str) or not api_key_env:
+                    issues.append(ValidationIssue(
+                        severity=ValidationSeverity.ERROR,
+                        category=ValidationCategory.SCHEMA,
+                        message="api_key_env must be a non-empty string",
+                        config_path=config_path,
+                        field_path="config.api_key_env",
+                        suggestions=["Set config.api_key_env to the env var name holding your API key (e.g., GEMINI_API_KEY)"]
+                    ))
+                elif api_key_env not in os.environ:
+                    suggestions, _ = self._suggestion_db.get_suggestions_for_error(
+                        field_path="config.api_key_env",
                         error_message=f"Gemini API key environment variable not set: {api_key_env}",
                         error_type="missing_env_var",
                         config_type="world_model",
@@ -401,16 +423,16 @@ class ConfigurationValidator:
                         category=ValidationCategory.DEPENDENCY,
                         message=f"Gemini API key environment variable not set: {api_key_env}",
                         config_path=config_path,
-                        field_path="gemini.api_key_env",
-                        suggestions=suggestions
+                        field_path="config.api_key_env",
+                        suggestions=suggestions or [f"Export {api_key_env} in your environment before starting POLARIS"]
                     ))
-            
-            # Validate temperature range
-            if "temperature" in gemini_config:
-                temp = gemini_config["temperature"]
+
+            # Validate temperature range if provided
+            if "temperature" in cfg:
+                temp = cfg["temperature"]
                 if not isinstance(temp, (int, float)) or temp < 0 or temp > 2:
                     suggestions, examples = self._suggestion_db.get_suggestions_for_error(
-                        field_path="gemini.temperature",
+                        field_path="config.temperature",
                         error_message=f"Invalid temperature value: {temp}",
                         error_type="out_of_range",
                         config_type="world_model",
@@ -421,36 +443,48 @@ class ConfigurationValidator:
                         category=ValidationCategory.SCHEMA,
                         message=f"Invalid temperature value: {temp}",
                         config_path=config_path,
-                        field_path="gemini.temperature",
+                        field_path="config.temperature",
                         suggestions=suggestions,
                         examples=examples
                     ))
-        
-        # Validate statistical configuration
-        if "statistical" in config:
-            stat_config = config["statistical"]
-            
-            # Check window size
-            if "time_series" in stat_config and "window_size" in stat_config["time_series"]:
-                window_size = stat_config["time_series"]["window_size"]
+
+        # Validate statistical configuration when selected
+        if implementation == "statistical":
+            ts = cfg.get("time_series", {}) if isinstance(cfg.get("time_series"), dict) else {}
+            if "window_size" in ts:
+                window_size = ts["window_size"]
                 if not isinstance(window_size, int) or window_size < 10:
-                    # Get performance suggestions for window size
                     perf_suggestions = self._suggestion_db.get_performance_suggestions(
-                        "statistical.time_series.window_size", window_size
+                        "config.time_series.window_size", window_size
                     )
                     issues.append(ValidationIssue(
                         severity=ValidationSeverity.WARNING,
                         category=ValidationCategory.PERFORMANCE,
                         message=f"Window size too small: {window_size}",
                         config_path=config_path,
-                        field_path="statistical.time_series.window_size",
+                        field_path="config.time_series.window_size",
                         suggestions=perf_suggestions or [
                             "Minimum recommended window size: 10",
                             "For stable patterns: 100-1000",
                             "Larger windows = more stable but slower"
                         ]
                     ))
-        
+
+        # Optional: sanity checks for hybrid configuration
+        if implementation == "hybrid":
+            model_weights = cfg.get("model_weights", {})
+            if isinstance(model_weights, dict) and model_weights:
+                total = sum(v for v in model_weights.values() if isinstance(v, (int, float)))
+                if abs(total - 1.0) > 1e-6:
+                    issues.append(ValidationIssue(
+                        severity=ValidationSeverity.INFO,
+                        category=ValidationCategory.SCHEMA,
+                        message=f"model_weights should sum to 1.0 (current: {total:.3f})",
+                        config_path=config_path,
+                        field_path="config.model_weights",
+                        suggestions=["Normalize weights so they add up to 1.0"]
+                    ))
+
         return issues
     
     def _validate_plugin_config(self, config: Dict[str, Any], config_path: str) -> List[ValidationIssue]:

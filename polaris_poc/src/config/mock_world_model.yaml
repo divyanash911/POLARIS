@@ -47,3 +47,38 @@ config:
         - hypothesis: "Minor performance variation"
           probability: 0.1
           reasoning: "Slight deviation in response times"
+
+# Environment variable overrides for different deployment environments
+# Values here will override the configuration above when the corresponding
+# environment variable is set to 'true' (case-insensitive).
+env_overrides:
+  # Development environment overrides (LOCAL_DEV=true)
+  LOCAL_DEV:
+    config:
+      response_delay_ms: 0  # No artificial delay in dev
+      default_confidence: 0.9
+      responses:
+        query:
+          current_state: "Development mode - Using mock data"
+
+  # Test environment overrides (TEST_ENV=true)
+  TEST_ENV:
+    config:
+      response_delay_ms: 5  # Small delay to simulate real conditions
+      default_confidence: 1.0  # Maximum confidence for consistent test results
+      responses:
+        diagnosis:
+          default_hypotheses:
+            - hypothesis: "Test failure detected"
+              probability: 0.95
+              reasoning: "Test environment detected - simulating failure case"
+
+  # Production-like testing (STAGING=true)
+  STAGING:
+    config:
+      response_delay_ms: 50  # More realistic delay
+      default_confidence: 0.8  # Slightly lower confidence to simulate real conditions
+      responses:
+        simulation:
+          default_message: "Staging environment - simulated prediction"
+          future_states_count: 5
