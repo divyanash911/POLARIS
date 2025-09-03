@@ -142,11 +142,20 @@ class ExampleMetaLearnerAgent(BaseMetaLearnerAgent):
                 f"Starting world model calibration: {calibration_request.request_id}"
             )
 
-            # Use base class method to request calibration from Digital Twin
-            dt_response = await self.request_world_model_calibration(
-                calibration_request.target_metrics,
-                calibration_request.validation_window_hours,
-            )
+            # Try to use Digital Twin for calibration
+            dt_response = None
+            try:
+                dt_response = await self.request_world_model_calibration(
+                    calibration_request.target_metrics,
+                    calibration_request.validation_window_hours,
+                )
+            except RuntimeError as e:
+                if "Not connected to NATS" in str(e):
+                    self.logger.warning(
+                        "Digital Twin calibration not available, using mock calibration"
+                    )
+                else:
+                    raise
 
             if dt_response and dt_response.success:
                 # Real calibration from Digital Twin

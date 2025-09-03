@@ -180,6 +180,9 @@ knowledge_base:
     @pytest.mark.asyncio
     async def test_calibrate_world_model(self, agent):
         """Test world model calibration."""
+        # Mock NATS connection to None to trigger fallback behavior
+        agent.nc = None
+
         request = CalibrationRequest(
             target_metrics=["cpu_usage", "response_time"],
             calibration_data={"validation_data": {}},
@@ -354,7 +357,9 @@ class TestErrorHandling:
             async def handle_trigger(self, trigger_type, trigger_data):
                 raise Exception("Trigger handling failed")
 
-        return FailingMetaLearnerAgent("failing-agent")
+        return FailingMetaLearnerAgent(
+            "failing-agent", config_path="src/config/polaris_config.yaml"
+        )
 
     @pytest.mark.asyncio
     async def test_analysis_error_handling(self, failing_agent):

@@ -361,11 +361,13 @@ class BaseMetaLearnerAgent(ABC):
     ) -> bool:
         """Store meta-learning insights in the knowledge base."""
         try:
-            # Convert insights to KBEntry format
+            # Use model_dump with JSON serialization mode for datetime handling
+            insights_dict = insights.model_dump(mode="json")
+
             kb_entry = {
                 "data_type": "learned_pattern",
                 "summary": f"Meta-learning insights from {self.agent_id}",
-                "content": insights.dict(),
+                "content": insights_dict,
                 "tags": ["meta_learning", "adaptation_patterns", self.agent_id],
                 "source": f"meta_learner_{self.agent_id}",
                 "timestamp": insights.timestamp.isoformat(),
