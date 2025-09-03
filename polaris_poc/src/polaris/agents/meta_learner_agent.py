@@ -15,14 +15,26 @@ The Meta-Learner Agent is designed to:
 """
 
 import abc
+import json
 import logging
+import nats
+import os
+import time
 import uuid
+import yaml
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, Callable
 
 from pydantic import BaseModel, Field
+
+# Import KB models for consistency
+try:
+    from polaris.knowledge_base.models import KBEntry, KBQuery, KBResponse
+except ImportError:
+    # Fallback to relative import if needed
+    from ..knowledge_base.models import KBEntry, KBQuery, KBResponse
 
 
 class TriggerType(str, Enum):
@@ -132,6 +144,30 @@ class MetaLearningInsights(BaseModel):
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+# ===============================================================
+# == DIGITAL TWIN INTERFACES
+# ===============================================================
+
+
+class DTQuery(BaseModel):
+    """Query to Digital Twin for meta-learning purposes."""
+
+    query_type: str = "calibration_check"
+    parameters: Dict[str, Any] = Field(default_factory=dict)
+    target_metrics: List[str] = Field(default_factory=list)
+    query_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+
+
+class DTResponse(BaseModel):
+    """Response from Digital Twin."""
+
+    success: bool
+    confidence: float = 0.0
+    explanation: str = ""
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    calibration_metrics: Dict[str, float] = Field(default_factory=dict)
+
+
 class BaseMetaLearnerAgent(ABC):
     """
     Abstract base class for Meta-Learner agents in POLARIS.
@@ -151,6 +187,8 @@ class BaseMetaLearnerAgent(ABC):
     def __init__(
         self,
         agent_id: str,
+        config_path: str,
+        nats_url: Optional[str] = None,
         logger: Optional[logging.Logger] = None,
         config: Optional[Dict[str, Any]] = None,
     ):
@@ -158,6 +196,8 @@ class BaseMetaLearnerAgent(ABC):
 
         Args:
             agent_id: Unique identifier for this agent instance
+            config_path: Path to POLARIS framework configuration
+            nats_url: NATS server URL (loaded from config if not provided)
             logger: Logger instance (created if not provided)
             config: Agent-specific configuration
         """
@@ -165,6 +205,271 @@ class BaseMetaLearnerAgent(ABC):
         self.logger = logger or logging.getLogger(self.__class__.__name__)
         self.config = config or {}
         self.running = False
+
+        # Load configuration
+        with open(config_path, "r") as f:
+            self.framework_config = yaml.safe_load(f)
+
+        # Apply environment overrides
+        self._apply_env_overrides(self.framework_config)
+
+        # Set up NATS connection parameters
+        self.nats_url = nats_url or self.framework_config.get("nats", {}).get(
+            "url", "nats://localhost:4222"
+        )
+        self.nc: Optional[nats.NATS] = None
+
+        # NATS subjects for KB and DT communication
+        self.kb_request_subject = "polaris.knowledge.query"
+        self.kb_stats_subject = "polaris.knowledge.stats"
+        self.dt_query_subject = "polaris.digital_twin.query"
+        self.kb_request_timeout = 30.0
+        self.dt_request_timeout = 20.0
+
+        # Meta-learning specific tracking
+        self.learning_history: List[Dict[str, Any]] = []
+        self.active_calibrations: Dict[str, CalibrationRequest] = {}
+
+    def _apply_env_overrides(self, config: dict, prefix: str = "") -> None:
+        """Apply environment variable overrides to configuration."""
+        for key, value in config.items():
+            env_key = (
+                f"POLARIS_{prefix.upper()}_{key.upper()}"
+                if prefix
+                else f"POLARIS_{key.upper()}"
+            )
+            if isinstance(value, dict):
+                self._apply_env_overrides(value, f"{prefix}_{key}" if prefix else key)
+            else:
+                if env_key in os.environ:
+                    config[key] = os.environ[env_key]
+
+    async def connect(self) -> None:
+        """Connect to NATS server and set up subscriptions."""
+        if self.nc:
+            return
+
+        try:
+            self.nc = await nats.connect(self.nats_url)
+            await self._setup_subscriptions()
+            self.logger.info(
+                f"Meta-Learner {self.agent_id} connected to NATS ({self.nats_url})"
+            )
+        except Exception as e:
+            self.logger.error(f"Failed to connect to NATS: {e}")
+            raise
+
+    async def disconnect(self) -> None:
+        """Disconnect from NATS server."""
+        if self.nc:
+            await self.nc.close()
+            self.nc = None
+        self.logger.info(f"Meta-Learner {self.agent_id} disconnected from NATS")
+
+    async def _setup_subscriptions(self) -> None:
+        """Set up NATS subscriptions for meta-learning."""
+        await self.listen("system.notifications", self._handle_system_notification)
+        await self.listen(
+            f"polaris.meta_learner.{self.agent_id}.trigger",
+            self._handle_trigger_request,
+        )
+
+    async def publish(self, topic: str, message: dict) -> None:
+        """Publish a message to a specific topic."""
+        if not self.nc:
+            raise RuntimeError("Not connected to NATS")
+        await self.nc.publish(topic, json.dumps(message).encode())
+
+    async def listen(self, topic: str, callback: Callable) -> None:
+        """Listen for messages on a specific topic."""
+        if not self.nc:
+            raise RuntimeError("Not connected to NATS")
+
+        async def message_handler(msg):
+            try:
+                data = json.loads(msg.data.decode())
+                await callback(data, msg)
+            except Exception as e:
+                self.logger.error(
+                    f"Error processing message on topic {topic}: {e}", exc_info=True
+                )
+
+        await self.nc.subscribe(topic, cb=message_handler)
+
+    # ===============================================================
+    # == KNOWLEDGE BASE INTERACTION METHODS
+    # ===============================================================
+
+    async def query_knowledge_base(
+        self, query_data: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """Query the knowledge base via NATS."""
+        if not self.nc:
+            raise RuntimeError("Not connected to NATS")
+
+        try:
+            response = await self.nc.request(
+                self.kb_request_subject,
+                json.dumps(query_data).encode(),
+                timeout=self.kb_request_timeout,
+            )
+            return json.loads(response.data.decode())
+        except Exception as e:
+            self.logger.error(f"KB query failed: {e}")
+            return None
+
+    async def get_kb_stats(self) -> Optional[Dict[str, Any]]:
+        """Get Knowledge Base statistics."""
+        if not self.nc:
+            raise RuntimeError("Not connected to NATS")
+
+        try:
+            response = await self.nc.request(self.kb_stats_subject, b"", timeout=5.0)
+            return json.loads(response.data.decode())
+        except Exception as e:
+            self.logger.error(f"KB stats query failed: {e}")
+            return None
+
+    async def query_adaptation_patterns(
+        self, hours: float = 24.0, limit: int = 50
+    ) -> Optional[List[Dict[str, Any]]]:
+        """Query adaptation patterns from knowledge base."""
+        query_data = {
+            "query_type": "structured",
+            "data_types": ["adaptation_decision", "learned_pattern"],
+            "limit": limit,
+            "filters": {"time_window_hours": hours},
+        }
+        result = await self.query_knowledge_base(query_data)
+        return result.get("results", []) if result and result.get("success") else []
+
+    async def query_performance_trends(
+        self, hours: float = 24.0, limit: int = 30
+    ) -> Optional[List[Dict[str, Any]]]:
+        """Query system performance observations."""
+        query_data = {
+            "query_type": "structured",
+            "data_types": ["observation"],
+            "limit": limit,
+            "filters": {"time_window_hours": hours, "metric_type": "performance"},
+        }
+        result = await self.query_knowledge_base(query_data)
+        return result.get("results", []) if result and result.get("success") else []
+
+    async def store_meta_learning_insights(
+        self, insights: MetaLearningInsights
+    ) -> bool:
+        """Store meta-learning insights in the knowledge base."""
+        try:
+            # Convert insights to KBEntry format
+            kb_entry = {
+                "data_type": "learned_pattern",
+                "summary": f"Meta-learning insights from {self.agent_id}",
+                "content": insights.dict(),
+                "tags": ["meta_learning", "adaptation_patterns", self.agent_id],
+                "source": f"meta_learner_{self.agent_id}",
+                "timestamp": insights.timestamp.isoformat(),
+            }
+
+            # Publish as telemetry event to be stored in KB
+            await self.publish("polaris.telemetry.events", {"events": [kb_entry]})
+            return True
+        except Exception as e:
+            self.logger.error(f"Failed to store insights: {e}")
+            return False
+
+    # ===============================================================
+    # == DIGITAL TWIN INTERACTION METHODS
+    # ===============================================================
+
+    async def query_digital_twin(self, query: DTQuery) -> Optional[DTResponse]:
+        """Query the Digital Twin via NATS."""
+        if not self.nc:
+            raise RuntimeError("Not connected to NATS")
+
+        try:
+            query_msg = {
+                "query_type": query.query_type,
+                "parameters": query.parameters,
+                "target_metrics": query.target_metrics,
+                "query_id": query.query_id,
+            }
+
+            response = await self.nc.request(
+                self.dt_query_subject,
+                json.dumps(query_msg).encode(),
+                timeout=self.dt_request_timeout,
+            )
+
+            data = json.loads(response.data.decode())
+            return DTResponse(
+                success=data.get("success", False),
+                confidence=data.get("confidence", 0.0),
+                explanation=data.get("explanation", ""),
+                metadata=data.get("metadata", {}),
+                calibration_metrics=data.get("calibration_metrics", {}),
+            )
+        except Exception as e:
+            self.logger.error(f"Digital Twin query failed: {e}")
+            return None
+
+    async def request_world_model_calibration(
+        self, target_metrics: List[str], validation_hours: float = 1.0
+    ) -> Optional[DTResponse]:
+        """Request world model calibration from Digital Twin."""
+        query = DTQuery(
+            query_type="calibration_request",
+            parameters={
+                "validation_window_hours": validation_hours,
+                "focus_metrics": target_metrics,
+            },
+            target_metrics=target_metrics,
+        )
+        return await self.query_digital_twin(query)
+
+    # ===============================================================
+    # == SYSTEM NOTIFICATION HANDLERS
+    # ===============================================================
+
+    async def _handle_system_notification(self, data: Dict[str, Any], msg) -> None:
+        """Handle system notifications."""
+        notification_type = data.get("type")
+        if notification_type == "shutdown":
+            self.logger.info(
+                f"Meta-Learner {self.agent_id} received shutdown notification"
+            )
+            await self.disconnect()
+        elif notification_type == "health_check":
+            await self.publish(
+                "system.health_responses",
+                {
+                    "agent_id": self.agent_id,
+                    "status": "healthy",
+                    "active_calibrations": len(self.active_calibrations),
+                    "learning_history_size": len(self.learning_history),
+                },
+            )
+
+    async def _handle_trigger_request(self, data: Dict[str, Any], msg) -> None:
+        """Handle meta-learning trigger requests."""
+        try:
+            trigger_type = TriggerType(data.get("trigger_type", "manual"))
+            context_data = data.get("context", {})
+
+            context = MetaLearningContext(
+                trigger_type=trigger_type,
+                trigger_source=data.get("source", "unknown"),
+                time_window_hours=context_data.get("time_window_hours", 24.0),
+                focus_areas=context_data.get("focus_areas", []),
+                constraints=context_data.get("constraints", {}),
+                metadata=context_data.get("metadata", {}),
+            )
+
+            # Trigger meta-learning cycle
+            await self.handle_trigger(trigger_type, context_data)
+
+        except Exception as e:
+            self.logger.error(f"Error handling trigger request: {e}", exc_info=True)
 
     @abstractmethod
     async def analyze_adaptation_patterns(

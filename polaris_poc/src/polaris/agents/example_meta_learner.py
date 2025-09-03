@@ -54,8 +54,8 @@ class ExampleMetaLearnerAgent(BaseMetaLearnerAgent):
     def __init__(
         self,
         agent_id: str,
-        knowledge_base_client: Optional[Any] = None,
-        world_model_client: Optional[Any] = None,
+        config_path: str,
+        nats_url: Optional[str] = None,
         logger: Optional[logging.Logger] = None,
         config: Optional[Dict[str, Any]] = None,
     ):
@@ -63,15 +63,12 @@ class ExampleMetaLearnerAgent(BaseMetaLearnerAgent):
 
         Args:
             agent_id: Unique identifier for this agent
-            knowledge_base_client: Client for knowledge base interactions
-            world_model_client: Client for world model interactions
+            config_path: Path to POLARIS framework configuration
+            nats_url: NATS server URL (loaded from config if not provided)
             logger: Logger instance
             config: Agent configuration
         """
-        super().__init__(agent_id, logger, config)
-
-        self.kb_client = knowledge_base_client
-        self.world_model_client = world_model_client
+        super().__init__(agent_id, config_path, nats_url, logger, config)
 
         # Learning state
         self.learning_history: List[Dict[str, Any]] = []
@@ -145,51 +142,56 @@ class ExampleMetaLearnerAgent(BaseMetaLearnerAgent):
                 f"Starting world model calibration: {calibration_request.request_id}"
             )
 
-            # In a real implementation, this would interact with the digital twin
-            # to compare predictions with actual outcomes and adjust model parameters
+            # Use base class method to request calibration from Digital Twin
+            dt_response = await self.request_world_model_calibration(
+                calibration_request.target_metrics,
+                calibration_request.validation_window_hours,
+            )
 
-            if self.world_model_client is None:
-                self.logger.warning(
-                    "No world model client available, using mock calibration"
-                )
-                return CalibrationResult(
+            if dt_response and dt_response.success:
+                # Real calibration from Digital Twin
+                result = CalibrationResult(
                     request_id=calibration_request.request_id,
                     success=True,
-                    improvement_score=0.85,
-                    calibrated_parameters={"mock_calibration": True},
-                    validation_metrics={"accuracy": 0.92, "precision": 0.88},
+                    improvement_score=dt_response.confidence,
+                    calibrated_parameters=dt_response.metadata.get(
+                        "calibrated_parameters", {}
+                    ),
+                    validation_metrics=dt_response.calibration_metrics,
+                )
+            else:
+                # Fallback to mock calibration if DT unavailable
+                self.logger.warning(
+                    "Digital Twin calibration failed, using mock calibration"
                 )
 
-            # Simulate calibration process
-            await asyncio.sleep(0.1)  # Simulate processing time
+                # Simulate calibration process
+                await asyncio.sleep(0.1)  # Simulate processing time
 
-            # Extract historical data for comparison
-            validation_data = calibration_request.calibration_data.get(
-                "validation_data", {}
-            )
-            target_metrics = calibration_request.target_metrics
+                # Extract historical data for comparison
+                target_metrics = calibration_request.target_metrics
 
-            # Calculate improvement score based on mock validation
-            improvement_score = min(0.95, 0.7 + len(target_metrics) * 0.05)
+                # Calculate improvement score based on mock validation
+                improvement_score = min(0.95, 0.7 + len(target_metrics) * 0.05)
 
-            result = CalibrationResult(
-                request_id=calibration_request.request_id,
-                success=True,
-                improvement_score=improvement_score,
-                calibrated_parameters={
-                    "learning_rate": 0.01,
-                    "regularization": 0.001,
-                    "ensemble_weights": [0.3, 0.4, 0.3],
-                },
-                validation_metrics={
-                    metric: 0.85 + (hash(metric) % 15) / 100
-                    for metric in target_metrics
-                },
-            )
+                result = CalibrationResult(
+                    request_id=calibration_request.request_id,
+                    success=True,
+                    improvement_score=improvement_score,
+                    calibrated_parameters={
+                        "learning_rate": 0.01,
+                        "regularization": 0.001,
+                        "ensemble_weights": [0.3, 0.4, 0.3],
+                    },
+                    validation_metrics={
+                        metric: 0.85 + (hash(metric) % 15) / 100
+                        for metric in target_metrics
+                    },
+                )
 
             self.last_calibration_time = datetime.now(timezone.utc)
             self.logger.info(
-                f"Calibration completed with improvement: {improvement_score}"
+                f"Calibration completed with improvement: {result.improvement_score}"
             )
 
             return result
@@ -414,35 +416,120 @@ class ExampleMetaLearnerAgent(BaseMetaLearnerAgent):
         self, start_time: datetime, end_time: datetime
     ) -> List[Dict[str, Any]]:
         """Query adaptation patterns from knowledge base."""
-        # Mock implementation - would query KB for adaptation decisions
-        return [
-            {
-                "pattern_type": "scale_out",
-                "frequency": 12,
-                "success_rate": 0.92,
-                "avg_execution_time_ms": 1500,
-                "context": "high_cpu_utilization",
-            },
-            {
-                "pattern_type": "circuit_breaker",
-                "frequency": 3,
-                "success_rate": 0.85,
-                "avg_execution_time_ms": 800,
-                "context": "external_service_failure",
-            },
-        ]
+        try:
+            # Use base class method to query adaptation patterns
+            time_window_hours = (end_time - start_time).total_seconds() / 3600
+            patterns = await self.query_adaptation_patterns(time_window_hours, limit=50)
+
+            if patterns:
+                # Process real patterns from KB
+                processed_patterns = []
+                for pattern in patterns:
+                    processed_patterns.append(
+                        {
+                            "pattern_type": pattern.get("summary", "unknown"),
+                            "frequency": pattern.get("content", {}).get("frequency", 1),
+                            "success_rate": pattern.get("content", {}).get(
+                                "success_rate", 0.5
+                            ),
+                            "avg_execution_time_ms": pattern.get("content", {}).get(
+                                "execution_time_ms", 1000
+                            ),
+                            "context": (
+                                pattern.get("tags", ["unknown"])[0]
+                                if pattern.get("tags")
+                                else "unknown"
+                            ),
+                        }
+                    )
+                return processed_patterns
+            else:
+                # Fallback to mock data if no real patterns available
+                return [
+                    {
+                        "pattern_type": "scale_out",
+                        "frequency": 12,
+                        "success_rate": 0.92,
+                        "avg_execution_time_ms": 1500,
+                        "context": "high_cpu_utilization",
+                    },
+                    {
+                        "pattern_type": "circuit_breaker",
+                        "frequency": 3,
+                        "success_rate": 0.85,
+                        "avg_execution_time_ms": 800,
+                        "context": "external_service_failure",
+                    },
+                ]
+        except Exception as e:
+            self.logger.warning(
+                f"Failed to query adaptation patterns: {e}, using mock data"
+            )
+            # Return mock data as fallback
+            return [
+                {
+                    "pattern_type": "scale_out",
+                    "frequency": 12,
+                    "success_rate": 0.92,
+                    "avg_execution_time_ms": 1500,
+                    "context": "high_cpu_utilization",
+                },
+            ]
 
     async def _analyze_performance_trends(
         self, start_time: datetime, end_time: datetime
     ) -> Dict[str, float]:
         """Analyze performance trends from metrics."""
-        # Mock implementation - would analyze system metrics
-        return {
-            "response_time": 1.15,  # 15% increase
-            "throughput": 0.95,  # 5% decrease
-            "error_rate": 1.05,  # 5% increase
-            "resource_utilization": 1.08,  # 8% increase
-        }
+        try:
+            # Use base class method to query performance trends
+            time_window_hours = (end_time - start_time).total_seconds() / 3600
+            trends = await self.query_performance_trends(time_window_hours, limit=30)
+
+            if trends:
+                # Process real trends from KB
+                trend_metrics = {}
+                for trend in trends:
+                    metric_name = trend.get("metric_name", "unknown")
+                    metric_value = trend.get("metric_value", 1.0)
+
+                    if "response_time" in metric_name.lower():
+                        trend_metrics["response_time"] = float(metric_value)
+                    elif "throughput" in metric_name.lower():
+                        trend_metrics["throughput"] = float(metric_value)
+                    elif "error" in metric_name.lower():
+                        trend_metrics["error_rate"] = float(metric_value)
+                    elif (
+                        "cpu" in metric_name.lower() or "memory" in metric_name.lower()
+                    ):
+                        trend_metrics["resource_utilization"] = float(metric_value)
+
+                # Fill in missing metrics with defaults
+                return {
+                    "response_time": trend_metrics.get("response_time", 1.0),
+                    "throughput": trend_metrics.get("throughput", 1.0),
+                    "error_rate": trend_metrics.get("error_rate", 1.0),
+                    "resource_utilization": trend_metrics.get(
+                        "resource_utilization", 1.0
+                    ),
+                }
+            else:
+                # Fallback to mock data
+                return {
+                    "response_time": 1.15,  # 15% increase
+                    "throughput": 0.95,  # 5% decrease
+                    "error_rate": 1.05,  # 5% increase
+                    "resource_utilization": 1.08,  # 8% increase
+                }
+        except Exception as e:
+            self.logger.warning(
+                f"Failed to analyze performance trends: {e}, using mock data"
+            )
+            return {
+                "response_time": 1.15,
+                "throughput": 0.95,
+                "error_rate": 1.05,
+                "resource_utilization": 1.08,
+            }
 
     async def _evaluate_coordination_effectiveness(
         self, start_time: datetime, end_time: datetime
@@ -552,6 +639,10 @@ class ExampleMetaLearnerAgent(BaseMetaLearnerAgent):
         """Handle periodic meta-learning trigger."""
         # Full meta-learning cycle
         insights = await self.analyze_adaptation_patterns(context)
+
+        # Store insights in knowledge base
+        await self.store_meta_learning_insights(insights)
+
         updates = await self.propose_parameter_updates(insights, context)
         validated = await self.validate_updates(updates)
         results = await self.apply_updates(validated)
@@ -568,6 +659,10 @@ class ExampleMetaLearnerAgent(BaseMetaLearnerAgent):
         """Handle threshold violation trigger."""
         # Quick analysis and targeted updates
         insights = await self.analyze_adaptation_patterns(context)
+
+        # Store insights in knowledge base
+        await self.store_meta_learning_insights(insights)
+
         updates = await self.propose_parameter_updates(insights, context)
 
         # Filter to only threshold-related updates

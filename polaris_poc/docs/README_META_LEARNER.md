@@ -2,8 +2,6 @@
 
 ## Implementation Summary
 
-I have successfully created a comprehensive **abstract interface for a Meta-Learner agent** for the POLARIS framework. The implementation is designed to operate at the meta-level, focusing on adaptation-strategy improvement rather than individual adaptation outcomes.
-
 ### Files Created
 
 1. **`/src/polaris/agents/meta_learner_agent.py`** - Main interface with abstract base class and data models
@@ -23,6 +21,40 @@ The Meta-Learner Agent is designed to:
 - **Provide confidence estimates** for proposed parameter updates
 - **Support multiple triggering mechanisms** (periodic, event-driven, performance-driven)
 - **Remain implementation-agnostic** for different meta-learning approaches
+
+## Recent Enhancements (September 2025)
+
+### **Added NATS Communication & Service Integration**
+
+The base class now includes full NATS communication capabilities and seamless integration with POLARIS services:
+
+#### **Knowledge Base Integration**
+
+- Query adaptation patterns and decisions from KB via NATS
+- Query performance trends and system observations
+- Store meta-learning insights back to KB
+- Consistent with existing KB interface and models
+
+#### **Digital Twin Integration**
+
+- Query Digital Twin for calibration requests via NATS
+- Handle DT responses with confidence and metrics
+- Graceful fallbacks when DT unavailable
+- Consistent with DT gRPC interface patterns
+
+#### **NATS Communication**
+
+- Full NATS integration consistent with other POLARIS agents
+- Connection management and error handling
+- System notification handling (shutdown, health checks)
+- External trigger handling via NATS subjects
+
+#### **Enhanced Base Class**
+
+- Added `config_path` parameter for loading POLARIS framework configuration
+- Added `nats_url` parameter (optional, loaded from config if not provided)
+- Added configuration loading with environment variable overrides
+- Maintains all existing abstract method signatures for backward compatibility
 
 ## Architecture
 
@@ -109,21 +141,28 @@ The Meta-Learner Agent is fully aligned with the POLARIS v2 design:
 
 ## Usage Examples
 
-### Basic Usage
+### ✨ **NEW: Enhanced Usage with NATS Integration**
 
 ```python
 from polaris.agents import ExampleMetaLearnerAgent
 from polaris.agents.meta_learner_agent import MetaLearningContext, TriggerType
 
-# Initialize the meta-learner agent
+# Initialize meta-learner with NATS and service integration
 agent = ExampleMetaLearnerAgent(
     agent_id="meta-learner-1",
-    knowledge_base_client=kb_client,
-    world_model_client=wm_client,
-    config={
-        "min_confidence_threshold": 0.7,
-        "analysis_window_hours": 24.0
-    }
+    config_path="path/to/polaris_config.yaml",
+    nats_url="nats://localhost:4222"  # optional
+)
+
+# Connect to NATS and services
+await agent.connect()
+
+# Query knowledge base for adaptation patterns
+patterns = await agent.query_adaptation_patterns(hours=24.0)
+
+# Request world model calibration
+response = await agent.request_world_model_calibration(
+    target_metrics=["cpu_usage", "response_time"]
 )
 
 # Create learning context
@@ -133,11 +172,31 @@ context = MetaLearningContext(
     time_window_hours=24.0
 )
 
-# Execute meta-learning cycle
+# Execute meta-learning cycle with automatic insight storage
 insights = await agent.analyze_adaptation_patterns(context)
 updates = await agent.propose_parameter_updates(insights, context)
 validated = await agent.validate_updates(updates)
 results = await agent.apply_updates(validated)
+
+# Store insights back to KB (automatically handled in triggers)
+await agent.store_meta_learning_insights(insights)
+
+# Clean shutdown
+await agent.disconnect()
+```
+
+### Legacy Usage (Still Supported)
+
+```python
+# Previous constructor style still works with updates
+agent = ExampleMetaLearnerAgent(
+    agent_id="meta-learner-1",
+    config_path="path/to/polaris_config.yaml",
+    config={
+        "min_confidence_threshold": 0.7,
+        "analysis_window_hours": 24.0
+    }
+)
 ```
 
 ### Quick Trigger Handling
@@ -172,6 +231,80 @@ calibration_request = CalibrationRequest(
 result = await agent.calibrate_world_model(calibration_request)
 print(f"Calibration improvement: {result.improvement_score}")
 ```
+
+## Implementation Details
+
+### ✨ **Enhanced Base Class Methods**
+
+The `BaseMetaLearnerAgent` now provides built-in methods for seamless integration:
+
+#### **Knowledge Base Integration**
+
+- `query_adaptation_patterns(hours, limit)` - Query adaptation decisions and patterns
+- `query_performance_trends(hours, limit)` - Query system performance observations
+- `store_meta_learning_insights(insights)` - Store insights back to KB
+- `query_knowledge_base(query_data)` - Generic KB query via NATS
+- `get_kb_stats()` - Get KB statistics
+
+#### **Digital Twin Integration**
+
+- `query_digital_twin(query)` - Generic DT query via NATS
+- `request_world_model_calibration(metrics, hours)` - Request calibration from DT
+
+#### **NATS Communication**
+
+- `connect()` / `disconnect()` - NATS connection management
+- `publish(topic, message)` / `listen(topic, callback)` - Generic NATS messaging
+- System notification handling (shutdown, health checks)
+- External trigger handling via NATS subjects
+
+### **Configuration Management**
+
+```yaml
+# polaris_config.yaml
+nats:
+  url: "nats://localhost:4222"
+
+digital_twin:
+  enabled: true
+
+knowledge_base:
+  enabled: true
+```
+
+### **Error Handling & Resilience**
+
+- Graceful fallbacks when services unavailable
+- Comprehensive error logging with context
+- Connection retry and timeout handling
+- Configurable timeouts for KB and DT requests
+
+### **Benefits of Enhanced Implementation**
+
+#### 🎯 **Minimal Code Changes**
+
+- Enhanced base class without breaking existing abstract interface
+- Updated example implementation with minimal changes
+- Maintained backward compatibility where possible
+
+#### 🎯 **Consistency with POLARIS Architecture**
+
+- Uses same NATS communication patterns as other agents
+- Follows same configuration loading approach
+- Integrates with existing KB and DT services seamlessly
+
+#### 🎯 **Easy Operation**
+
+- Base class provides all necessary infrastructure
+- Concrete implementations just need to inherit and use methods
+- No need to manage NATS connections or message formatting manually
+
+#### 🎯 **Production Ready**
+
+- Proper error handling and logging
+- Connection management and graceful shutdowns
+- Configurable timeouts and retry logic
+- Test coverage maintained
 
 ## Implementation Guidelines
 
@@ -310,11 +443,13 @@ All tests pass successfully, ensuring the interface is robust and ready for prod
 
 ## Next Steps
 
-1. **Integration** - Connect with actual knowledge base and world model clients
-2. **Advanced Implementations** - Add Bayesian optimization, meta-RL, or LLM-based learners
-3. **Configuration** - Add YAML configuration templates
-4. **Monitoring** - Add metrics collection and dashboard integration
-5. **Production Testing** - Deploy in test environment for validation
+1. **✅ COMPLETED:** Enhanced with Knowledge Base and Digital Twin integration via NATS
+2. **✅ COMPLETED:** Full NATS communication infrastructure
+3. **✅ COMPLETED:** Configuration management and environment variable support
+4. **Advanced Implementations** - Add Bayesian optimization, meta-RL, or LLM-based learners
+5. **Enhanced Configuration** - Add more sophisticated YAML configuration templates
+6. **Monitoring** - Add metrics collection and dashboard integration
+7. **Production Testing** - Deploy in test environment for validation
 
 The interface is **ready for immediate use** and can be extended with sophisticated machine learning approaches while maintaining the same clean contract.
 
