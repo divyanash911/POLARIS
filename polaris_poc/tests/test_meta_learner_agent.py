@@ -7,8 +7,14 @@ validating the abstract contract and testing the example implementation.
 
 import pytest
 import asyncio
+import sys
+import os
+import tempfile
 from datetime import datetime, timezone, timedelta
 from unittest.mock import AsyncMock, MagicMock
+
+# Add the src directory to Python path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from polaris.agents.meta_learner_agent import (
     BaseMetaLearnerAgent,
@@ -122,25 +128,30 @@ class TestMetaLearningDataModels:
 
 
 class TestExampleMetaLearnerAgent:
-    """Test the example meta-learner implementation."""
+    """Test the example Meta-Learner Agent implementation."""
 
     @pytest.fixture
-    def mock_kb_client(self):
-        """Mock knowledge base client."""
-        return MagicMock()
+    def config_path(self):
+        """Create temporary config file for testing."""
+        config_content = """
+nats:
+  url: "nats://localhost:4222"
+digital_twin:
+  enabled: true
+knowledge_base:
+  enabled: true
+"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            f.write(config_content)
+            return f.name
 
     @pytest.fixture
-    def mock_world_model_client(self):
-        """Mock world model client."""
-        return MagicMock()
-
-    @pytest.fixture
-    def agent(self, mock_kb_client, mock_world_model_client):
+    def agent(self, config_path):
         """Create test agent instance."""
         return ExampleMetaLearnerAgent(
             agent_id="test-agent",
-            knowledge_base_client=mock_kb_client,
-            world_model_client=mock_world_model_client,
+            config_path=config_path,
+            nats_url="nats://localhost:4222",
             config={"min_confidence_threshold": 0.7, "analysis_window_hours": 24.0},
         )
 
@@ -169,6 +180,9 @@ class TestExampleMetaLearnerAgent:
     @pytest.mark.asyncio
     async def test_calibrate_world_model(self, agent):
         """Test world model calibration."""
+        # Mock NATS connection to None to trigger fallback behavior
+        agent.nc = None
+
         request = CalibrationRequest(
             target_metrics=["cpu_usage", "response_time"],
             calibration_data={"validation_data": {}},
@@ -343,7 +357,9 @@ class TestErrorHandling:
             async def handle_trigger(self, trigger_type, trigger_data):
                 raise Exception("Trigger handling failed")
 
-        return FailingMetaLearnerAgent("failing-agent")
+        return FailingMetaLearnerAgent(
+            "failing-agent", config_path="src/config/polaris_config.yaml"
+        )
 
     @pytest.mark.asyncio
     async def test_analysis_error_handling(self, failing_agent):

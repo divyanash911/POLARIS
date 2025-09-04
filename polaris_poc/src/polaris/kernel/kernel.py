@@ -104,22 +104,33 @@ class SWIMKernel(BaseKernel):
     async def process_telemetry_event(self, msg):
         try:
             telemetry_data = json.loads(msg.data.decode())
-            self.controller = self.strategy.select_controller(telemetry_data)
-            self.logger.info(f"Selected controller: {self.controller.__class__.__name__}")
-            
-            action = self.generate_action(telemetry_data)
-            if action is None:
-                self.logger.warning("No action generated from telemetry data")
-                return
-            
-            # Extract context for verification
-            context = self._extract_context_from_telemetry(telemetry_data)
-            
-            # Use verification-aware execution
-            await self.execute_action_with_verification(action, context)
-            
+
+            controller = self.strategy.select_controller(telemetry_data)
+            self.logger.info(f"Selected controller: {controller.__class__.__name__}")
+
+            if isinstance(controller, SlowController):
+                # Send telemetry to reasoner instead of generating action here
+                await self.nats_client.publish(
+                    "polaris.reasoner.kernel.requests",
+                    json.dumps(telemetry_data).encode()
+                )
+                self.logger.info("Delegated telemetry to Reasoner via polaris.reasoner.kernel.requests")
+            else:
+                # Normal fast path
+                action = self.generate_action(telemetry_data)
+                if action is None:
+                    self.logger.warning("No action generated from telemetry data")
+                    return
+
+                # Extract context for verification
+                context = self._extract_context_from_telemetry(telemetry_data)
+
+                # Use verification-aware execution
+                await self.execute_action_with_verification(action, context)
+
         except Exception as e:
             self.logger.error("Error processing telemetry event", extra={"error": str(e)})
+
 
     def generate_action(self, telemetry_data):
         if self.controller:
