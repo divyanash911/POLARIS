@@ -347,35 +347,34 @@ Generate a control action based on this information. """
                 ),
             ]
 
+            # Simplified generation config for a more reliable non-streaming call
             generate_content_config = types.GenerateContentConfig(
                 temperature=self.temperature,
-                max_output_tokens=self.max_tokens,  # <-- fixed bug (was self.max_output_tokens)
-                thinking_config=types.ThinkingConfig(
-                    thinking_budget=-1,  # Use default thinking budget
-                ),
+                max_output_tokens=self.max_tokens,
+                # The 'thinking_config' is removed as it's not needed for this use case
             )
 
-            # Collect streamed response
-            response_text = ""
-            for chunk in self.client.models.generate_content_stream(
+            # --- MODIFICATION START ---
+            # Use the non-streaming generate_content method for robustness.
+            # This waits for the full response and is less prone to truncation.
+            response = self.client.models.generate_content(
                 model=self.model,
                 contents=contents,
                 config=generate_content_config,
-            ):
-                if chunk.text:
-                    response_text += chunk.text
+            )
 
-            response_text = response_text.strip()
+            response_text = response.text.strip()
+            # --- MODIFICATION END ---
 
             # === Log prompts & responses to JSONL ===
             log_entry = {
-            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
-            "model": self.model,
-            "system_prompt": str(system_prompt),
-            "user_prompt": str(user_prompt),
-            "response": str(response_text),
-            "reasoning_type": getattr(getattr(self, "reasoning_type", None), "value", None),  # safely to string
-        }
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
+                "model": self.model,
+                "system_prompt": str(system_prompt),
+                "user_prompt": str(user_prompt),
+                "response": str(response_text),
+                "reasoning_type": getattr(getattr(self, "reasoning_type", None), "value", None),
+            }
 
             log_file = Path("llm_calls.jsonl")
             with log_file.open("a", encoding="utf-8") as f:
@@ -386,7 +385,6 @@ Generate a control action based on this information. """
         except Exception as e:
             self.logger.error(f"Gemini API call failed: {e}")
             raise
-
 
     def _parse_llm_response(self, response: str) -> Dict[str, Any]:
         """Parse and validate the LLM response."""

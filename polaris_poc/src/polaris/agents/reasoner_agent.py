@@ -699,6 +699,7 @@ class ReasonerAgent(NATSReasonerBase):
             knowledge_types = reasoning_impl.get_required_knowledge_types(context)
             
             reasoning_steps.append("Querying knowledge base for relevant information")
+            relevant_knowledge = []
             if self.kb_query:
                 k_nl = await self.kb_query.query_natural_language(" ".join(search_terms))
                 k_struct = await self.kb_query.query_structured(knowledge_types)
