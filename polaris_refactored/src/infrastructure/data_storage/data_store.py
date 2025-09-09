@@ -18,7 +18,7 @@ from ..di import Injectable
 from .repository import (
     Repository, AdaptationActionRepository,
     SystemDependencyRepository, LearnedPatternRepository,
-    SystemStateRepository
+    SystemStateRepository, ExecutionResultRepository
 )
 from .storage_backend import StorageBackend, GraphStorageBackend
 
@@ -144,6 +144,8 @@ class PolarisDataStore(Injectable):
             self._repositories["adaptation_actions"] = AdaptationActionRepository(document_backend)
             # Learned patterns are document-oriented
             self._repositories["learned_patterns"] = LearnedPatternRepository(document_backend)
+            # Execution results are also document-oriented
+            self._repositories["execution_results"] = ExecutionResultRepository(document_backend)
         
         # Use graph backend for system dependencies if available
         graph_backend = self.storage_backends.get("graph")

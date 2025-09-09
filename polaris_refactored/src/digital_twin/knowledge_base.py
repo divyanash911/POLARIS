@@ -1,12 +1,19 @@
 """
 Knowledge Base Implementation
 
-Placeholder for the knowledge base that will be implemented in task 6.2.
-This provides the interface definitions for now.
+Implements the digital twin's knowledge management capabilities for the POLARIS framework.
+The knowledge base serves as the central repository for system state, relationships,
+and learned patterns to support decision-making and adaptation.
+
+Key Features:
+- State persistence and querying
+- Relationship management between system components
+- Pattern recognition and storage
+- Historical data analysis
 """
 
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from ..domain.models import SystemState, SystemDependency, LearnedPattern
 from ..framework.events import TelemetryEvent
@@ -16,6 +23,8 @@ from ..infrastructure.data_storage import (
     SystemStateRepository,
     SystemDependencyRepository,
     LearnedPatternRepository,
+    AdaptationActionRepository,
+    ExecutionResultRepository
 )
 
 
@@ -23,7 +32,15 @@ class PolarisKnowledgeBase(Injectable):
     """
     POLARIS Knowledge Base using Repository and CQRS patterns.
     
-    This will be fully implemented in task 6.2.
+    The knowledge base provides a unified interface for storing and retrieving
+    system knowledge, including:
+    - Current and historical system states
+    - Component relationships and dependencies
+    - Learned patterns and behaviors
+    - Adaptation history and outcomes
+    
+    It follows the Command Query Responsibility Segregation (CQRS) pattern to
+    separate read and write operations for better scalability and performance.
     """
     
     def __init__(self, data_store: PolarisDataStore):
@@ -33,6 +50,8 @@ class PolarisKnowledgeBase(Injectable):
         self._states_repo: Optional[SystemStateRepository] = None
         self._deps_repo: Optional[SystemDependencyRepository] = None
         self._patterns_repo: Optional[LearnedPatternRepository] = None
+        self._actions_repo: Optional[AdaptationActionRepository] = None
+        self._exec_results_repo: Optional[ExecutionResultRepository] = None
 
     def _states(self) -> SystemStateRepository:
         if self._states_repo is None:
@@ -48,6 +67,17 @@ class PolarisKnowledgeBase(Injectable):
         if self._patterns_repo is None:
             self._patterns_repo = self._data_store.get_repository("learned_patterns")  # type: ignore[assignment]
         return self._patterns_repo  # type: ignore[return-value]
+    
+    def _actions(self) -> AdaptationActionRepository:
+        if self._actions_repo is None:
+            self._actions_repo = self._data_store.get_repository("adaptation_actions")  # type: ignore[assignment]
+        return self._actions_repo  # type: ignore[return-value]
+    
+    def _exec_results(self):
+        if self._exec_results_repo is None:
+            # Delayed import typing to avoid circulars in type checking
+            self._exec_results_repo = self._data_store.get_repository("execution_results")  # type: ignore[assignment]
+        return self._exec_results_repo  # type: ignore[return-value]
     
     # Telemetry and State Management
     
@@ -108,6 +138,34 @@ class PolarisKnowledgeBase(Injectable):
         """Store a learned pattern."""
         await self._patterns().save(pattern)
     
+    async def store_adaptation_actions(self, actions: List["AdaptationAction"]) -> None:
+        """Persist planned adaptation actions to the knowledge base.
+        
+        Uses the document-backed AdaptationActionRepository to store actions for later
+        querying via get_adaptation_history(). Best-effort; errors are not raised.
+        """
+        try:
+            repo = self._actions()
+        except Exception:
+            return
+        for a in actions:
+            try:
+                await repo.save(a)
+            except Exception:
+                # Best-effort persistence; continue on error
+                continue
+    
+    async def store_execution_result(self, result: "ExecutionResult") -> None:
+        """Persist an execution result for an adaptation action (best-effort)."""
+        try:
+            repo = self._exec_results()
+        except Exception:
+            return
+        try:
+            await repo.save(result)
+        except Exception:
+            return
+    
     async def query_patterns(
         self, 
         pattern_type: str, 
@@ -164,8 +222,78 @@ class PolarisKnowledgeBase(Injectable):
         behavior_type: str
     ) -> Dict[str, Any]:
         """Query historical behavior patterns for a system."""
-        # Placeholder - will be implemented in task 6.2
-        return {}
+        # Simple behavior analysis over recent history (last 24h)
+        end_time = datetime.utcnow()
+        start_time = end_time - timedelta(hours=24)
+        states = await self.get_historical_states(system_id, start_time, end_time)
+        if not states:
+            return {"system_id": system_id, "behavior_type": behavior_type, "summary": {}, "samples": 0}
+        
+        # Aggregate numeric metrics across states
+        metric_sums: Dict[str, float] = {}
+        metric_counts: Dict[str, int] = {}
+        health_counts: Dict[str, int] = {}
+        first_ts = states[0].timestamp
+        last_ts = states[-1].timestamp
+        first_metrics = states[0].metrics
+        last_metrics = states[-1].metrics
+        
+        for st in states:
+            hs = getattr(st.health_status, "value", str(st.health_status))
+            health_counts[hs] = health_counts.get(hs, 0) + 1
+            for k, v in (st.metrics or {}).items():
+                try:
+                    val = float(getattr(v, "value", v))
+                except Exception:
+                    continue
+                metric_sums[k] = metric_sums.get(k, 0.0) + val
+                metric_counts[k] = metric_counts.get(k, 0) + 1
+        
+        metric_avgs = {k: (metric_sums[k] / metric_counts[k]) for k in metric_sums.keys() if metric_counts.get(k, 0) > 0}
+        
+        # Compute crude trend for common metrics (delta last-first)
+        def _num(m: Any) -> Optional[float]:
+            try:
+                return float(getattr(m, "value", m))
+            except Exception:
+                return None
+        trend: Dict[str, Any] = {}
+        for key in set(list(first_metrics.keys()) + list(last_metrics.keys())):
+            a = _num(first_metrics.get(key)) if key in first_metrics else None
+            b = _num(last_metrics.get(key)) if key in last_metrics else None
+            if a is not None and b is not None:
+                trend[key] = {"delta": b - a, "start": a, "end": b}
+        
+        summary: Dict[str, Any] = {
+            "window": {"start": start_time.isoformat(), "end": end_time.isoformat(), "samples": len(states)},
+            "health_distribution": health_counts,
+            "metric_averages": metric_avgs,
+            "metric_trends": trend,
+        }
+        
+        # Behavior-specific notes (extensible)
+        notes: List[str] = []
+        bt = behavior_type.lower()
+        if bt in ("anomaly", "spike"):
+            # flag metrics with large delta
+            for k, t in trend.items():
+                if abs(t.get("delta", 0.0)) >= 0.25:
+                    notes.append(f"significant_change:{k}")
+        elif bt in ("stability", "stable"):
+            unstable = [k for k, t in trend.items() if abs(t.get("delta", 0.0)) >= 0.1]
+            if unstable:
+                notes.append("not_stable")
+            else:
+                notes.append("stable_window")
+        elif bt in ("trend", "degradation", "improvement"):
+            # summarize cpu/latency trends if present
+            for focus in ("cpu", "latency"):
+                deltas = [t.get("delta", 0.0) for k, t in trend.items() if focus in k.lower()]
+                if deltas:
+                    avg_delta = sum(deltas) / len(deltas)
+                    notes.append(f"{focus}_avg_delta:{avg_delta:.3f}")
+        summary["notes"] = notes
+        return {"system_id": system_id, "behavior_type": behavior_type, "summary": summary, "samples": len(states)}
     
     async def get_adaptation_history(
         self, 
@@ -173,5 +301,42 @@ class PolarisKnowledgeBase(Injectable):
         action_type: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """Get adaptation history for a system."""
-        # Placeholder - will be implemented in task 6.2
-        return []
+        try:
+            actions_repo = self._actions()
+        except Exception:
+            return []
+        actions = await actions_repo.list_by_target_system(system_id, action_type=action_type)
+        # Sort by created_at descending if available
+        actions.sort(key=lambda a: a.created_at or datetime.min, reverse=True)
+        # Try to load execution results to enrich history
+        exec_repo = None
+        try:
+            exec_repo = self._exec_results()
+        except Exception:
+            exec_repo = None
+        history: List[Dict[str, Any]] = []
+        for a in actions:
+            entry: Dict[str, Any] = {
+                "action_id": a.action_id,
+                "action_type": a.action_type,
+                "target_system": a.target_system,
+                "parameters": a.parameters,
+                "priority": a.priority,
+                "timeout_seconds": a.timeout_seconds,
+                "created_at": a.created_at.isoformat() if a.created_at else None,
+            }
+            if exec_repo:
+                try:
+                    res = await exec_repo.get_by_id(a.action_id)
+                    if res:
+                        entry["execution_result"] = {
+                            "status": getattr(res.status, "value", str(res.status)),
+                            "result_data": res.result_data,
+                            "error_message": res.error_message,
+                            "execution_time_ms": res.execution_time_ms,
+                            "completed_at": res.completed_at.isoformat() if res.completed_at else None,
+                        }
+                except Exception:
+                    pass
+            history.append(entry)
+        return history

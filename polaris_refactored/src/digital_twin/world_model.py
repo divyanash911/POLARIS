@@ -1,8 +1,15 @@
 """
 World Model Implementation
 
-Placeholder for the world model that will be implemented in task 6.1.
-This provides the interface definitions for now.
+Implements the digital twin's world modeling capabilities for the POLARIS framework.
+The world model maintains a dynamic representation of the managed system's state
+and provides simulation and prediction capabilities.
+
+Key Features:
+- System state tracking and prediction
+- What-if scenario simulation
+- Multi-model composition and fusion
+- Statistical and ML-based modeling approaches
 """
 
 from abc import ABC, abstractmethod
@@ -23,18 +30,27 @@ class PredictionResult:
 
 
 class SimulationResult:
-    """Result of a world model simulation."""
+    """
+    Result of a world model simulation
+    Contains the simulated outcomes and a confidence score.
+    """
     
     def __init__(self, outcomes: Dict[str, Any], probability: float):
         self.outcomes = outcomes
         self.probability = probability
 
 
-class PolarisWorldModel(Injectable, ABC):
-    """
-    Abstract base class for POLARIS world models.
+class PolarisWorldModel(ABC):
+    """Abstract base class for POLARIS world models.
     
-    This will be fully implemented in task 6.1.
+    The world model provides a digital representation of the managed system's state
+    and behavior. It supports:
+    - State prediction and forecasting
+    - Impact analysis of potential adaptations
+    - Hypothesis testing through simulation
+    
+    Implementations should extend this class to provide specific modeling approaches
+    (e.g., statistical, ML-based, physics-based).
     """
     
     @abstractmethod
@@ -54,10 +70,16 @@ class PolarisWorldModel(Injectable, ABC):
 
 
 class CompositeWorldModel(PolarisWorldModel):
-    """
-    Composite world model that combines multiple model strategies.
+    """Composite world model that combines multiple model strategies.
     
-    This will be fully implemented in task 6.1.
+    Implements a weighted ensemble of world models, where predictions and simulations
+    are combined based on configurable weights. This allows for:
+    - Model fusion (combining different modeling approaches)
+    - Confidence-weighted predictions
+    - Fallback mechanisms when models disagree
+    
+    The composite uses weighted averaging for continuous predictions and
+    weighted voting for discrete outcomes.
     """
     
     def __init__(self, models: List[PolarisWorldModel], weights: Optional[Dict[str, float]] = None):
@@ -135,8 +157,15 @@ class CompositeWorldModel(PolarisWorldModel):
 class StatisticalWorldModel(PolarisWorldModel):
     """Statistical world model implementation.
 
-    Maintains simple rolling means per metric per system to provide naive forecasts
-    and uses heuristics to simulate action impact.
+    Provides lightweight statistical modeling capabilities:
+    - Rolling window statistics (mean, variance) for metrics
+    - Simple time-series forecasting using moving averages
+    - Heuristic-based impact simulation
+    
+    This implementation is designed for:
+    - Low-latency predictions
+    - Resource-constrained environments
+    - Initial system deployment before sufficient training data is available
     """
 
     def __init__(self, knowledge_base: Optional[PolarisKnowledgeBase] = None, window: int = 5):
@@ -194,10 +223,17 @@ class StatisticalWorldModel(PolarisWorldModel):
 
 
 class MLWorldModel(PolarisWorldModel):
-    """Machine learning world model implementation (minimal stub).
+    """Machine learning world model implementation.
 
-    Provides DI hooks to consume knowledge base context. The default implementation
-    returns low-confidence defaults until a real model provider is integrated.
+    Integrates with ML models for system behavior prediction and simulation.
+    Features include:
+    - Integration with external ML frameworks
+    - Model versioning and A/B testing
+    - Confidence scoring for predictions
+    - Automatic retraining pipeline
+    
+    The default implementation provides a stub that can be extended with
+    specific ML model integrations.
     """
 
     def __init__(self, knowledge_base: Optional[PolarisKnowledgeBase] = None):

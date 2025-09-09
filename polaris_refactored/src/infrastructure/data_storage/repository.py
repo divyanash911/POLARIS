@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Any, Optional, TypeVar, Generic
 from datetime import datetime
 
-from ...domain.models import SystemState, AdaptationAction, SystemDependency, LearnedPattern
+from ...domain.models import SystemState, AdaptationAction, SystemDependency, LearnedPattern, ExecutionResult
 from ..exceptions import DataStoreError
 
 from .storage_backend import StorageBackend, GraphStorageBackend
@@ -434,4 +434,105 @@ class AdaptationActionRepository(Repository[AdaptationAction]):
             timeout_seconds=data["timeout_seconds"],
             created_at=datetime.fromisoformat(data["created_at"]) if data["created_at"] else None
         )
+
+    async def query(self, filters: Dict[str, Any]) -> List[AdaptationAction]:
+        """Query adaptation actions by simple filters.
+
+        This is a thin helper over the storage backend's query. It should be used for
+        basic equality/range filters only. For more complex filtering, callers should
+        post-process results in memory.
+        """
+        try:
+            raw = await self.storage_backend.query(self.collection_name, filters)
+            return [self._dict_to_entity(d) for d in raw]
+        except Exception as e:
+            raise DataStoreError(
+                "Failed to query adaptation actions",
+                operation="query",
+                entity_type="AdaptationAction",
+                cause=e,
+            )
+
+    async def list_by_target_system(self, target_system: str, action_type: Optional[str] = None) -> List[AdaptationAction]:
+        """List adaptation actions for a given target system, optionally filtered by action type."""
+        filters: Dict[str, Any] = {"target_system": target_system}
+        if action_type:
+            filters["action_type"] = action_type
+        return await self.query(filters)
+
+
+class ExecutionResultRepository(Repository[ExecutionResult]):
+    """Repository for managing execution results."""
+
+    def __init__(self, storage_backend: StorageBackend):
+        super().__init__(storage_backend, "execution_results")
+
+    async def save(self, result: ExecutionResult) -> None:
+        try:
+            data = self._entity_to_dict(result)
+            # Use action_id as the key (1:1 mapping assumed in this simple store)
+            await self.storage_backend.store(self.collection_name, result.action_id, data)
+        except Exception as e:
+            raise DataStoreError(
+                f"Failed to save execution result for action {result.action_id}",
+                operation="save",
+                entity_type="ExecutionResult",
+                cause=e,
+            )
+
+    async def get_by_id(self, action_id: str) -> Optional[ExecutionResult]:
+        try:
+            data = await self.storage_backend.retrieve(self.collection_name, action_id)
+            return self._dict_to_entity(data) if data else None
+        except Exception as e:
+            raise DataStoreError(
+                f"Failed to retrieve execution result for action {action_id}",
+                operation="get_by_id",
+                entity_type="ExecutionResult",
+                cause=e,
+            )
+
+    async def delete(self, action_id: str) -> bool:
+        try:
+            return await self.storage_backend.delete(self.collection_name, action_id)
+        except Exception as e:
+            raise DataStoreError(
+                f"Failed to delete execution result for action {action_id}",
+                operation="delete",
+                entity_type="ExecutionResult",
+                cause=e,
+            )
+
+    def _entity_to_dict(self, result: ExecutionResult) -> Dict[str, Any]:
+        return {
+            "action_id": result.action_id,
+            "status": result.status.value if hasattr(result.status, "value") else str(result.status),
+            "result_data": result.result_data,
+            "error_message": result.error_message,
+            "execution_time_ms": result.execution_time_ms,
+            "completed_at": result.completed_at.isoformat() if result.completed_at else None,
+        }
+
+    def _dict_to_entity(self, data: Dict[str, Any]) -> ExecutionResult:
+        from ...domain.models import ExecutionStatus
+        return ExecutionResult(
+            action_id=data["action_id"],
+            status=ExecutionStatus(data["status"]) if data.get("status") in ExecutionStatus._value2member_map_ else ExecutionStatus.FAILED,
+            result_data=data.get("result_data", {}),
+            error_message=data.get("error_message"),
+            execution_time_ms=data.get("execution_time_ms"),
+            completed_at=datetime.fromisoformat(data["completed_at"]) if data.get("completed_at") else None,
+        )
+
+    async def query(self, filters: Dict[str, Any]) -> List[ExecutionResult]:
+        try:
+            raw = await self.storage_backend.query(self.collection_name, filters)
+            return [self._dict_to_entity(d) for d in raw]
+        except Exception as e:
+            raise DataStoreError(
+                "Failed to query execution results",
+                operation="query",
+                entity_type="ExecutionResult",
+                cause=e,
+            )
 

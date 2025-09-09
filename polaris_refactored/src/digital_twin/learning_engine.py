@@ -1,8 +1,15 @@
 """
 Learning Engine Implementation
 
-Placeholder for the learning engine that will be implemented in task 6.3.
-This provides the interface definitions for now.
+Implements the learning capabilities for the POLARIS digital twin framework.
+The learning engine enables the system to improve its behavior over time through
+various learning strategies and pattern recognition.
+
+Key Features:
+- Reinforcement learning for adaptation policies
+- Pattern recognition for system behavior
+- Knowledge extraction from system interactions
+- Continuous improvement through feedback loops
 """
 
 from abc import ABC, abstractmethod
@@ -17,7 +24,16 @@ from .world_model import PolarisWorldModel
 
 
 class LearningContext:
-    """Context information for learning operations."""
+    """Context information for learning operations.
+    
+    Captures the complete context of an adaptation event, including:
+    - System state before and after adaptation
+    - Adaptation action and its result
+    - Relevant system metrics and metadata
+    
+    This context is used by learning strategies to extract insights and
+    improve future adaptations.
+    """
     
     def __init__(
         self, 
@@ -33,7 +49,14 @@ class LearningContext:
 
 
 class LearnedKnowledge:
-    """Represents knowledge learned from an adaptation."""
+    """Represents knowledge learned from an adaptation.
+    
+    Encapsulates insights gained from system adaptations, including:
+    - Type of knowledge (pattern, rule, model update, etc.)
+    - Confidence level in the learned knowledge
+    - Metadata about the learning context
+    - Application scope and constraints
+    """
     
     def __init__(self, knowledge_type: str, data: Dict[str, Any], confidence: float):
         self.knowledge_type = knowledge_type
@@ -42,7 +65,13 @@ class LearnedKnowledge:
 
 
 class LearningStrategy(ABC):
-    """Abstract base class for learning strategies."""
+    """Abstract base class for learning strategies.
+    
+    Defines the interface for different learning approaches that can be
+    composed by the learning engine. Concrete implementations should
+    handle specific learning paradigms like reinforcement learning,
+    pattern recognition, or statistical learning.
+    """
     
     @abstractmethod
     def can_learn_from(self, context: LearningContext) -> bool:
@@ -97,10 +126,28 @@ class PatternRecognitionStrategy(LearningStrategy):
 
 
 class PolarisLearningEngine(Injectable):
-    """
-    POLARIS Learning Engine using Strategy pattern.
+    """POLARIS Learning Engine using Strategy pattern.
     
-    This will be fully implemented in task 6.3.
+    Orchestrates multiple learning strategies to continuously improve
+    system behavior. The learning engine is responsible for:
+    - Coordinating different learning strategies
+    - Managing the learning lifecycle
+    - Integrating learned knowledge into the system
+    - Providing insights and recommendations
+    
+    The engine follows the Strategy pattern to support multiple learning
+    approaches that can be composed and extended.
+    
+    Attributes:
+    - _learning_strategies (List[LearningStrategy]): List of learning strategies
+    - _world_model (Optional[PolarisWorldModel]): World model instance
+    - _kb (Optional[PolarisKnowledgeBase]): Knowledge base instance
+    
+    Methods:
+    - learn_from_adaptation (ExecutionResult) -> None: Learn from an adaptation result
+    - learn_from_system_behavior (str, Dict[str, Any]) -> None: Learn from observed system behavior
+    - get_learning_insights (str) -> List[Dict[str, Any]]: Get insights learned about a system
+    - recommend_adaptations (str, Dict[str, Any]) -> List[Dict[str, Any]]: Recommend adaptations based on learned knowledge
     """
     
     def __init__(self, learning_strategies: List[LearningStrategy] = None, knowledge_base: Optional[PolarisKnowledgeBase] = None, world_model: Optional[PolarisWorldModel] = None):

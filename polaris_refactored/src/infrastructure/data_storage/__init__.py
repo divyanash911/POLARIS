@@ -8,7 +8,7 @@ from .data_store import PolarisDataStore, PolarisUnitOfWork
 from .repository import (
     Repository, AdaptationActionRepository,
     SystemDependencyRepository, LearnedPatternRepository,
-    SystemStateRepository
+    SystemStateRepository, ExecutionResultRepository
 )
 from .storage_backend import StorageBackend, GraphStorageBackend, InMemoryGraphStorageBackend
 
@@ -23,6 +23,7 @@ __all__ = [
     "SystemDependencyRepository",
     "LearnedPatternRepository",
     "SystemStateRepository",
+    "ExecutionResultRepository",
 
     # Storage backends
     "StorageBackend",
