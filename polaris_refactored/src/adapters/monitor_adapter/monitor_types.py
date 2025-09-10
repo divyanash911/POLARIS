@@ -21,7 +21,7 @@ the metric, its value, and a timestamp indicating when the value was collected.
 """
 import logging
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, field
 from enum import Enum
 

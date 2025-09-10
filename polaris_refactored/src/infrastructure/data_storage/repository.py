@@ -10,7 +10,7 @@ possibly additional query methods.
 
 from abc import ABC, abstractmethod
 from typing import Dict, List, Any, Optional, TypeVar, Generic
-from datetime import datetime
+from datetime import datetime, timezone
 
 from ...domain.models import SystemState, AdaptationAction, SystemDependency, LearnedPattern, ExecutionResult
 from ..exceptions import DataStoreError

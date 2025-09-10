@@ -12,7 +12,7 @@ import json
 import logging
 import signal
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any
 
 from nats.aio.client import Client as NATS

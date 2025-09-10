@@ -7,7 +7,7 @@ for better error handling and diagnostics.
 
 from typing import Dict, List, Any, Optional
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class PolarisException(Exception):
@@ -32,7 +32,7 @@ class PolarisException(Exception):
         self.context = context or {}
         self.cause = cause
         self.correlation_id = correlation_id or str(uuid.uuid4())
-        self.timestamp = datetime.utcnow()
+        self.timestamp = datetime.now(timezone.utc)
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert exception to dictionary for logging/serialization."""

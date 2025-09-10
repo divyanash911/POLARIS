@@ -14,7 +14,7 @@ Key Features:
 
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 from ..domain.models import ExecutionResult, LearnedPattern
@@ -191,7 +191,7 @@ class PolarisLearningEngine(Injectable):
                     conditions={"system_id": context.system_id},
                     outcomes=knowledge.data,
                     confidence=knowledge.confidence,
-                    learned_at=datetime.utcnow(),
+                    learned_at=datetime.now(timezone.utc),
                     usage_count=0,
                 )
                 await self._kb.store_learned_pattern(pattern)
@@ -224,7 +224,7 @@ class PolarisLearningEngine(Injectable):
                     conditions={"system_id": system_id},
                     outcomes=knowledge.data,
                     confidence=knowledge.confidence,
-                    learned_at=datetime.utcnow(),
+                    learned_at=datetime.now(timezone.utc),
                     usage_count=0,
                 )
                 await self._kb.store_learned_pattern(pattern)

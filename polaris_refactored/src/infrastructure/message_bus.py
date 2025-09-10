@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Callable, List, Optional, Dict
 import asyncio
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 from ..domain.interfaces import EventHandler
 from .exceptions import EventBusError
@@ -254,7 +254,7 @@ class PolarisMessageBus(Injectable):
         """Convert an event object to a message dictionary."""
         message = {
             "type": type(event).__name__,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "data": {}
         }
         

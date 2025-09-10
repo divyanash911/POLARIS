@@ -13,7 +13,7 @@ Key Features:
 """
 
 from typing import List, Dict, Any, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from ..domain.models import SystemState, SystemDependency, LearnedPattern
 from ..framework.events import TelemetryEvent
@@ -223,7 +223,7 @@ class PolarisKnowledgeBase(Injectable):
     ) -> Dict[str, Any]:
         """Query historical behavior patterns for a system."""
         # Simple behavior analysis over recent history (last 24h)
-        end_time = datetime.utcnow()
+        end_time = datetime.now(timezone.utc)
         start_time = end_time - timedelta(hours=24)
         states = await self.get_historical_states(system_id, start_time, end_time)
         if not states:

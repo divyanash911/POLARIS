@@ -9,7 +9,7 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, List, Callable
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -199,7 +199,7 @@ class PolarisAdapter(Injectable, ABC):
     def metrics(self) -> AdapterMetrics:
         """Get adapter metrics."""
         if self._start_time:
-            self._metrics.uptime = datetime.utcnow() - self._start_time
+            self._metrics.uptime = datetime.now(timezone.utc) - self._start_time
         return self._metrics
     
     def is_running(self) -> bool:
@@ -252,7 +252,7 @@ class PolarisAdapter(Injectable, ABC):
             # Step 6: Update state and metrics
             self._state = AdapterState.RUNNING
             self._health_status = AdapterHealthStatus.HEALTHY
-            self._start_time = datetime.utcnow()
+            self._start_time = datetime.now(timezone.utc)
             self._retry_count = 0
             self._last_error = None
             
@@ -441,7 +441,7 @@ class PolarisAdapter(Injectable, ABC):
                 # Perform health check
                 previous_status = self._health_status
                 self._health_status = await self._perform_health_check()
-                self._last_health_check = datetime.utcnow()
+                self._last_health_check = datetime.now(timezone.utc)
                 
                 # Log status changes
                 if previous_status != self._health_status:
@@ -477,7 +477,7 @@ class PolarisAdapter(Injectable, ABC):
             
             # Check last activity
             if (self._metrics.last_activity and 
-                datetime.utcnow() - self._metrics.last_activity > timedelta(minutes=5)):
+                datetime.now(timezone.utc) - self._metrics.last_activity > timedelta(minutes=5)):
                 return AdapterHealthStatus.DEGRADED
             
             # Call subclass health check
@@ -511,7 +511,7 @@ class PolarisAdapter(Injectable, ABC):
                 "adapter_id": self.adapter_id,
                 "adapter_type": self.adapter_type,
                 "event_type": event_type,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "state": self._state.value,
                 "health_status": self._health_status.value
             }
@@ -544,7 +544,7 @@ class PolarisAdapter(Injectable, ABC):
         """Update adapter metrics."""
         self._metrics.processed_items += processed
         self._metrics.failed_items += failed
-        self._metrics.last_activity = datetime.utcnow()
+        self._metrics.last_activity = datetime.now(timezone.utc)
         
         # Calculate error rate
         total = self._metrics.processed_items + self._metrics.failed_items

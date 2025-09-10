@@ -10,7 +10,7 @@ collecting metrics from managed systems and publishing them to the event bus.
 import asyncio
 import logging
 from typing import Dict, Any, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from ...domain.models import SystemState, HealthStatus
 from ...framework.events import PolarisEventBus, TelemetryEvent, EventMetadata
@@ -294,7 +294,7 @@ class MonitorAdapter(PolarisAdapter):
             return CollectionResult(
                 system_id=target.system_id,
                 metrics={},
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 success=False,
                 error="No suitable collection strategy found",
                 strategy_name=None
@@ -373,7 +373,7 @@ class MonitorAdapter(PolarisAdapter):
                                 state = payload
                             elif isinstance(payload, dict):
                                 metrics = payload.get("metrics", {})
-                                ts = payload.get("timestamp", datetime.utcnow())
+                                ts = payload.get("timestamp", datetime.now(timezone.utc))
                                 state = SystemState(
                                     system_id=system_id,
                                     health_status=HealthStatus.HEALTHY,
@@ -386,7 +386,7 @@ class MonitorAdapter(PolarisAdapter):
                                     system_id=system_id,
                                     health_status=HealthStatus.HEALTHY,
                                     metrics={},
-                                    timestamp=datetime.utcnow(),
+                                    timestamp=datetime.now(timezone.utc),
                                 )
                             event = TelemetryEvent(
                                 system_state=state,
@@ -464,7 +464,7 @@ class MonitorAdapter(PolarisAdapter):
             # Check if collections are happening recently
             last_collection = self._collection_stats["last_collection_time"]
             if last_collection:
-                time_since_last = datetime.utcnow() - last_collection
+                time_since_last = datetime.now(timezone.utc) - last_collection
                 if time_since_last > timedelta(minutes=5):  # No collections in 5 minutes
                     return AdapterHealthStatus.DEGRADED
             

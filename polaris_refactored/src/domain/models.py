@@ -5,7 +5,7 @@ Defines the core data structures and value objects used throughout POLARIS.
 """
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Dict, Any, Optional, Union
 import uuid
@@ -39,7 +39,7 @@ class MetricValue:
     
     def __post_init__(self):
         if self.timestamp is None:
-            object.__setattr__(self, 'timestamp', datetime.utcnow())
+            object.__setattr__(self, 'timestamp', datetime.now(timezone.utc))
         if self.tags is None:
             object.__setattr__(self, 'tags', {})
 
@@ -73,7 +73,7 @@ class AdaptationAction:
         if self.action_id == "":
             object.__setattr__(self, 'action_id', str(uuid.uuid4()))
         if self.created_at is None:
-            object.__setattr__(self, 'created_at', datetime.utcnow())
+            object.__setattr__(self, 'created_at', datetime.now(timezone.utc))
 
 
 @dataclass(frozen=True)
@@ -88,7 +88,7 @@ class ExecutionResult:
     
     def __post_init__(self):
         if self.completed_at is None:
-            object.__setattr__(self, 'completed_at', datetime.utcnow())
+            object.__setattr__(self, 'completed_at', datetime.now(timezone.utc))
 
 
 @dataclass(frozen=True)

@@ -5,7 +5,7 @@ telemetry buffering and aggregation.
 
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from collections import defaultdict, deque
 from typing import Any, Dict, List, Optional, Set, Tuple
 

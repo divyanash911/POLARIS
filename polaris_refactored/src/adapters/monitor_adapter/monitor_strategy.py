@@ -11,7 +11,7 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from ...framework.plugin_management import ManagedSystemConnectorFactory
 
@@ -69,7 +69,7 @@ class DirectConnectorStrategy(MetricCollectionStrategy):
         connector_factory: ManagedSystemConnectorFactory
     ) -> CollectionResult:
         """Collect metrics directly from the connector."""
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
         
         try:
             # Create connector for the target system
@@ -90,7 +90,7 @@ class DirectConnectorStrategy(MetricCollectionStrategy):
             # Collect metrics from connector
             metrics = await connector.collect_metrics()
             
-            end_time = datetime.utcnow()
+            end_time = datetime.now(timezone.utc)
             
             return CollectionResult(
                 system_id=target.system_id,
@@ -101,7 +101,7 @@ class DirectConnectorStrategy(MetricCollectionStrategy):
             )
             
         except Exception as e:
-            end_time = datetime.utcnow()
+            end_time = datetime.now(timezone.utc)
             logger.error(f"Failed to collect metrics from {target.system_id}: {e}")
             
             return CollectionResult(
@@ -196,7 +196,7 @@ class RetryingStrategyDecorator(MetricCollectionStrategy):
         connector_factory: ManagedSystemConnectorFactory
     ) -> CollectionResult:
         attempt = 0
-        start_overall = datetime.utcnow()
+        start_overall = datetime.now(timezone.utc)
         last_result: Optional[CollectionResult] = None
         while True:
             attempt += 1
@@ -207,7 +207,7 @@ class RetryingStrategyDecorator(MetricCollectionStrategy):
                 if result and not result.strategy_name:
                     result.strategy_name = self.get_strategy_name()
                 # Adjust collection_duration to include total time
-                end_overall = datetime.utcnow()
+                end_overall = datetime.now(timezone.utc)
                 result.collection_duration = (end_overall - start_overall)
                 return result
             # compute backoff with jitter
@@ -220,7 +220,7 @@ class RetryingStrategyDecorator(MetricCollectionStrategy):
             except asyncio.CancelledError:
                 break
         # If we broke out due to cancellation, return last known result or a failure
-        end_overall = datetime.utcnow()
+        end_overall = datetime.now(timezone.utc)
         if last_result:
             last_result.collection_duration = (end_overall - start_overall)
             if not last_result.strategy_name:

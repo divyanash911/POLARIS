@@ -9,7 +9,7 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Callable, Set, Union
-from datetime import datetime
+from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from collections import defaultdict
 import uuid
@@ -43,7 +43,7 @@ class PolarisEvent(ABC):
         metadata: Optional[EventMetadata] = None
     ):
         self.event_id = event_id or str(uuid.uuid4())
-        self.timestamp = timestamp or datetime.utcnow()
+        self.timestamp = timestamp or datetime.now(timezone.utc)
         self.correlation_id = correlation_id
         self.metadata = metadata or EventMetadata()
         self._processed_by: Set[str] = set()
@@ -165,7 +165,7 @@ class EventSubscription:
     handler: Union[EventHandler, Callable]
     filter_func: Optional[Callable[[PolarisEvent], bool]] = None
     is_active: bool = True
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory= lambda: datetime.now(timezone.utc))
     
     def matches(self, event: PolarisEvent) -> bool:
         """Check if this subscription matches the given event."""

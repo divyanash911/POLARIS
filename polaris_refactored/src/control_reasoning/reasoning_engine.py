@@ -20,7 +20,7 @@ Key Components:
 
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from ..infrastructure.di import Injectable
 from ..digital_twin.knowledge_base import PolarisKnowledgeBase
@@ -122,7 +122,7 @@ class StatisticalReasoningStrategy(ReasoningStrategy):
         hist = context.historical_data
         # If KB available and no historical data provided in context, fetch last hour
         if not hist and self._kb:
-            end = datetime.utcnow()
+            end = datetime.now(timezone.utc)
             start = end - timedelta(hours=1)
             try:
                 states = await self._kb.get_historical_states(context.system_id, start, end)

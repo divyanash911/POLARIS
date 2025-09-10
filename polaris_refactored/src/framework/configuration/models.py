@@ -2,19 +2,21 @@
 Configuration data models with validation.
 """
 
+from dataclasses import field
 from typing import Dict, Any, Optional, List
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator, ValidationInfo
 
 
 class NATSConfiguration(BaseModel):
     """NATS message broker configuration with validation."""
-    servers: List[str] = Field(default=["nats://localhost:4222"], min_items=1)
+    servers: List[str] = Field(default=["nats://localhost:4222"], min_length=1)
     username: Optional[str] = None
     password: Optional[str] = None
     token: Optional[str] = None
     timeout: int = Field(default=30, ge=1, le=300)
     
-    @validator('servers')
+    @field_validator('servers')
+    @classmethod
     def validate_servers(cls, v):
         """Validate NATS server URLs."""
         for server in v:
@@ -30,7 +32,8 @@ class TelemetryConfiguration(BaseModel):
     batch_size: int = Field(default=100, ge=1, le=10000)
     retention_days: int = Field(default=30, ge=1, le=365)
     
-    @validator('collection_interval')
+    @field_validator('collection_interval')
+    @classmethod
     def validate_collection_interval(cls, v):
         """Ensure collection interval is reasonable."""
         if v < 5:
@@ -47,10 +50,11 @@ class LoggingConfiguration(BaseModel):
     max_file_size: int = Field(default=10485760, ge=1048576)  # 10MB default, min 1MB
     backup_count: int = Field(default=5, ge=1, le=100)
     
-    @validator('file_path')
-    def validate_file_path(cls, v, values):
+    @field_validator('file_path')
+    @classmethod
+    def validate_file_path(cls, v, info: ValidationInfo):
         """Validate file path when file output is used."""
-        if values.get('output') in ['file', 'both'] and not v:
+        if info.data.get('output') in ['file', 'both'] and not v:
             raise ValueError("file_path is required when output is 'file' or 'both'")
         return v
 
@@ -73,7 +77,8 @@ class ManagedSystemConfiguration(BaseModel):
     monitoring_config: Dict[str, Any] = Field(default_factory=dict)
     enabled: bool = True
     
-    @validator('system_id')
+    @field_validator('system_id')
+    @classmethod
     def validate_system_id(cls, v):
         """Validate system ID format."""
         if not v.replace('_', '').replace('-', '').isalnum():

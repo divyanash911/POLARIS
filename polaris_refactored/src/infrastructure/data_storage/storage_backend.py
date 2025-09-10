@@ -17,7 +17,7 @@ All storage backends implement the StorageBackend abstract base class.
 
 from abc import ABC, abstractmethod
 from typing import Dict, List, Any, Optional, TypeVar
-from datetime import datetime
+from datetime import datetime, timezone
 
 T = TypeVar('T')
 
@@ -169,7 +169,7 @@ class InMemoryGraphStorageBackend(GraphStorageBackend):
             "relationship_type": relationship_type,
             "strength": strength,
             "metadata": dict(metadata) if metadata else {},
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
         self._outgoing.setdefault(source_system, []).append(edge)
         self._incoming.setdefault(target_system, []).append(edge)

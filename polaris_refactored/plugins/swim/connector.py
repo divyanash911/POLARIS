@@ -10,7 +10,7 @@ import asyncio
 import logging
 import time
 from typing import Any, Dict, Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 
 from ...src.domain.interfaces import ManagedSystemConnector
 from ...src.domain.models import (
@@ -123,28 +123,28 @@ class SwimTCPConnector(ManagedSystemConnector):
                 name="server_count",
                 value=server_count,
                 unit="count",
-                timestamp=datetime.utcnow()
+                timestamp=datetime.now(timezone.utc)
             )
             
             metrics["active_servers"] = MetricValue(
                 name="active_servers", 
                 value=active_servers,
                 unit="count",
-                timestamp=datetime.utcnow()
+                timestamp=datetime.now(timezone.utc)
             )
             
             metrics["max_servers"] = MetricValue(
                 name="max_servers",
                 value=max_servers,
                 unit="count", 
-                timestamp=datetime.utcnow()
+                timestamp=datetime.now(timezone.utc)
             )
             
             metrics["dimmer"] = MetricValue(
                 name="dimmer",
                 value=dimmer,
                 unit="ratio",
-                timestamp=datetime.utcnow()
+                timestamp=datetime.now(timezone.utc)
             )
             
             # Try to collect performance metrics (may not be available in all SWIM versions)
@@ -154,7 +154,7 @@ class SwimTCPConnector(ManagedSystemConnector):
                     name="basic_response_time",
                     value=basic_rt,
                     unit="ms",
-                    timestamp=datetime.utcnow()
+                    timestamp=datetime.now(timezone.utc)
                 )
             except Exception:
                 pass  # Optional metric
@@ -165,7 +165,7 @@ class SwimTCPConnector(ManagedSystemConnector):
                     name="optional_response_time",
                     value=opt_rt,
                     unit="ms",
-                    timestamp=datetime.utcnow()
+                    timestamp=datetime.now(timezone.utc)
                 )
             except Exception:
                 pass  # Optional metric
@@ -177,7 +177,7 @@ class SwimTCPConnector(ManagedSystemConnector):
                     name="server_utilization",
                     value=utilization,
                     unit="ratio",
-                    timestamp=datetime.utcnow()
+                    timestamp=datetime.now(timezone.utc)
                 )
             
             return metrics
@@ -200,7 +200,7 @@ class SwimTCPConnector(ManagedSystemConnector):
             
             return SystemState(
                 system_id=self._system_id,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 metrics=metrics,
                 health_status=health_status,
                 metadata={
@@ -214,7 +214,7 @@ class SwimTCPConnector(ManagedSystemConnector):
             self.logger.error(f"Failed to get system state: {e}")
             return SystemState(
                 system_id=self._system_id,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 metrics={},
                 health_status=HealthStatus.UNHEALTHY,
                 metadata={"error": str(e)}

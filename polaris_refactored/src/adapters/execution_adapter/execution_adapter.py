@@ -16,7 +16,7 @@ interface. The execution results are published as `ExecutionResultEvent` objects
 import asyncio
 import logging
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 from ...domain.models import AdaptationAction, ExecutionResult, ExecutionStatus, SystemState
 from ...domain.interfaces import ManagedSystemConnector
@@ -49,7 +49,7 @@ class ActionExecutionPipeline:
     
     async def execute(self, action: AdaptationAction, initial_context: Optional[Dict[str, Any]] = None) -> ExecutionResult:
         """Execute an action through the pipeline."""
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
         context: Dict[str, Any] = {
             "action": action,
             "start_time": start_time,
@@ -88,7 +88,7 @@ class ActionExecutionPipeline:
                         status=ExecutionStatus.FAILED,
                         result_data=context.get("result_data", {}),
                         error_message=str(e),
-                        execution_time_ms=int((datetime.utcnow() - start_time).total_seconds() * 1000),
+                        execution_time_ms=int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000),
                     )
                     context["execution_result"] = err_result
                     break
@@ -99,7 +99,7 @@ class ActionExecutionPipeline:
                     action_id=action.action_id,
                     status=ExecutionStatus.SUCCESS,
                     result_data=context.get("result_data", {}),
-                    execution_time_ms=int((datetime.utcnow() - start_time).total_seconds() * 1000),
+                    execution_time_ms=int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000),
                 )
             else:
                 # Ensure execution_time is set
@@ -110,7 +110,7 @@ class ActionExecutionPipeline:
                         status=res.status,
                         result_data=res.result_data,
                         error_message=res.error_message,
-                        execution_time_ms=int((datetime.utcnow() - start_time).total_seconds() * 1000),
+                        execution_time_ms=int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000),
                     )
             
             return context["execution_result"]
@@ -121,7 +121,7 @@ class ActionExecutionPipeline:
                 status=ExecutionStatus.FAILED,
                 result_data=context.get("result_data", {}),
                 error_message=str(e),
-                execution_time_ms=int((datetime.utcnow() - start_time).total_seconds() * 1000),
+                execution_time_ms=int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000),
             )
 
 

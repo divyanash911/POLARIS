@@ -9,7 +9,7 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Any, Callable, Union
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, field
 from enum import Enum
 import uuid
@@ -144,7 +144,7 @@ class PolarisAdaptationCommand(AdaptationCommand):
         self.priority = priority
         self.context = context or CommandContext()
         self.status = CommandStatus.PENDING
-        self.created_at = datetime.utcnow()
+        self.created_at = datetime.now(timezone.utc)
         self.validation_errors: List[str] = []
         self.execution_history: List[CommandResult] = []
         self._undo_actions: List[Callable] = []
@@ -156,7 +156,7 @@ class PolarisAdaptationCommand(AdaptationCommand):
         result = CommandResult(
             command_id=self.command_id,
             status=CommandStatus.EXECUTING,
-            started_at=datetime.utcnow(),
+            started_at=datetime.now(timezone.utc),
             context=self.context
         )
         
@@ -171,7 +171,7 @@ class PolarisAdaptationCommand(AdaptationCommand):
             # Update result
             result.execution_result = execution_result
             result.status = CommandStatus.COMPLETED
-            result.completed_at = datetime.utcnow()
+            result.completed_at = datetime.now(timezone.utc)
             result.duration = result.completed_at - result.started_at
             
             self.status = CommandStatus.COMPLETED
@@ -183,7 +183,7 @@ class PolarisAdaptationCommand(AdaptationCommand):
             # Handle execution failure
             result.error = e
             result.status = CommandStatus.FAILED
-            result.completed_at = datetime.utcnow()
+            result.completed_at = datetime.now(timezone.utc)
             result.duration = result.completed_at - result.started_at
             
             self.status = CommandStatus.FAILED
@@ -225,7 +225,7 @@ class PolarisAdaptationCommand(AdaptationCommand):
             
             # Check timeout constraints
             if self.context.timeout:
-                if datetime.utcnow() - self.created_at > self.context.timeout:
+                if datetime.now(timezone.utc) - self.created_at > self.context.timeout:
                     self.validation_errors.append("Command has exceeded timeout before execution")
                     return False
             
@@ -540,7 +540,7 @@ class PolarisCommandProcessor(Injectable):
             command_id=command.command_id,
             status=CommandStatus.COMPLETED,
             execution_result=execution_result,
-            completed_at=datetime.utcnow(),
+            completed_at=datetime.now(timezone.utc),
             context=command.context
         )
         
@@ -583,7 +583,7 @@ class PolarisCommandProcessor(Injectable):
             command_id=command.command_id,
             status=CommandStatus.FAILED,
             error=error,
-            completed_at=datetime.utcnow(),
+            completed_at=datetime.now(timezone.utc),
             context=command.context
         )
         
