@@ -294,7 +294,7 @@ class PolarisAdaptiveController:
             return
 
         # Plan & Execute trigger
-        await self.trigger_adaptation_process(adaptation_need)
+        await self.trigger_adaptation_process(adaptation_need, telemetry.system_state)
     
     async def assess_adaptation_need(self, telemetry: TelemetryEvent) -> AdaptationNeed:
         """Assess if adaptation is needed based on telemetry."""
@@ -319,13 +319,24 @@ class PolarisAdaptiveController:
 
         return AdaptationNeed(system_id=state.system_id, is_needed=False, reason="No issues detected")
     
-    async def trigger_adaptation_process(self, adaptation_need: AdaptationNeed) -> None:
-        """Trigger the adaptation process for an identified need."""
+    async def trigger_adaptation_process(self, adaptation_need: AdaptationNeed, current_state_obj: Optional[SystemState] = None) -> None:
+        """Trigger the adaptation process for an identified need.
+
+        current_state_obj: optionally provide the live SystemState that triggered analysis.
+        If not provided, the controller will fall back to knowledge base snapshot.
+        """
         if not self._event_bus:
             return
         system_id = adaptation_need.system_id
         # Build planning context
-        current_state = await self._get_current_state_snapshot(system_id)
+        if current_state_obj is not None:
+            current_state = {
+                "metrics": current_state_obj.metrics,
+                "health_status": current_state_obj.health_status.value,
+                "timestamp": current_state_obj.timestamp,
+            }
+        else:
+            current_state = await self._get_current_state_snapshot(system_id)
         strategy = await self.select_control_strategy(system_id, {"adaptation_need": adaptation_need.__dict__, "current_state": current_state})
         actions: List[AdaptationAction] = []
         if strategy:

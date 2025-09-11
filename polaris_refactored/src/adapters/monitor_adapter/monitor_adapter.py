@@ -26,6 +26,8 @@ from .monitor_strategy import (
     PollingStrategy, BatchCollectionStrategy, RetryingStrategyDecorator
 )
 
+from polaris_refactored.src.domain.models import MetricValue
+
 logger = logging.getLogger(__name__)
 
 
@@ -360,19 +362,24 @@ class MonitorAdapter(PolarisAdapter):
         """Start push-based telemetry subscriptions if connectors support it."""
         if not hasattr(self, "_push_subscriptions"):
             self._push_subscriptions: Dict[str, Any] = {}
+        
         for system_id, target in self._monitoring_targets.items():
             if not target.enabled:
                 continue
             try:
-                connector = self.connector_factory.create_connector(target.connector_type, target.config)
+                connector = self.plugin_registry.get_loaded_connectors().get(target.connector_type)
+                if connector is None:
+                    logger.warning(f"Connector {target.connector_type} not found, creating new instance")   
+                    connector = self.connector_factory.create_connector(target.connector_type, target.config)
+                
                 if hasattr(connector, "subscribe_telemetry") and callable(getattr(connector, "subscribe_telemetry")):
-                    async def handler(payload):
+                    async def handler(payload, system_id=system_id):
                         try:
                             # Attempt to interpret payload
                             if isinstance(payload, SystemState):
                                 state = payload
                             elif isinstance(payload, dict):
-                                metrics = payload.get("metrics", {})
+                                metrics = {k: MetricValue(**v) if isinstance(v, dict) else v for k, v in payload.get("metrics", {}).items()}
                                 ts = payload.get("timestamp", datetime.now(timezone.utc))
                                 state = SystemState(
                                     system_id=system_id,
@@ -399,8 +406,10 @@ class MonitorAdapter(PolarisAdapter):
                                 )
                             )
                             await self.event_bus.publish_telemetry(event)
+                        
                         except Exception as ex:
                             logger.error(f"Push telemetry handler error for {system_id}: {ex}")
+                    
                     token = connector.subscribe_telemetry(handler)
                     self._push_subscriptions[system_id] = {
                         "connector": connector,
@@ -409,6 +418,7 @@ class MonitorAdapter(PolarisAdapter):
                     logger.info(f"Subscribed to push telemetry for {system_id}")
                 else:
                     logger.warning(f"Connector for {system_id} does not support push telemetry subscription")
+            
             except Exception as e:
                 logger.error(f"Failed to start push subscription for {system_id}: {e}")
 

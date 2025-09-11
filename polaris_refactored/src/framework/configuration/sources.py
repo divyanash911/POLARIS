@@ -3,6 +3,8 @@ Configuration sources for loading configuration data.
 """
 
 import os
+import re
+from venv import logger
 import yaml
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Union, List
@@ -93,6 +95,9 @@ class EnvironmentConfigurationSource(ConfigurationSource):
         
         for key, value in os.environ.items():
             if key.startswith(self.prefix):
+                if not value.strip():
+                    logger.warning(f"Empty environment variable: {key} [SKIPPING]")
+                    continue
                 # Remove prefix and convert to nested dict
                 config_key = key[len(self.prefix):].lower()
                 self._set_nested_value(config, config_key, self._parse_value(value, config_key))
@@ -137,7 +142,29 @@ class EnvironmentConfigurationSource(ConfigurationSource):
                 current = current[part]
             
             current[parts[-1]] = value
-    
+    @staticmethod
+    def _parse_escaped_list(value: str) -> list[str]:
+        """
+        Parses a comma-separated string into a list, respecting the '/' escape character.
+        - A comma preceded by a slash (e.g., '/,') is treated as a literal comma.
+        - A slash preceded by a slash (e.g., '//') is treated as a literal slash.
+        """
+        if not value.strip():
+            return []
+
+        # Split by commas that are not preceded by a slash
+        items = re.split(r'(?<!\\),', value)
+        
+        # Clean up items: strip whitespace and replace escaped characters
+        cleaned_items = []
+        for item in items:
+            # Replace escaped commas and slashes with their literal values
+            # and strip whitespace from the final item.
+            cleaned_item = item.replace('\\,', ',').replace('\\\\', '\\').strip()
+            cleaned_items.append(cleaned_item)
+            
+        return cleaned_items
+
     def _parse_value(self, value: str, key: str = "") -> Any:
         """Parse environment variable value to appropriate type."""
         # Try to parse as boolean
@@ -163,17 +190,15 @@ class EnvironmentConfigurationSource(ConfigurationSource):
         }
         
         if key.lower() in list_fields:
-            # Always return as list for these fields
-            if ',' in value:
-                return [item.strip() for item in value.split(',')]
-            else:
-                return [value.strip()]
+            return self._parse_escaped_list(value)
         
-        # Try to parse as list (comma-separated) for other fields
-        if ',' in value:
-            return [item.strip() for item in value.split(',')]
-        
-        # Return as string
+        value = self._parse_escaped_list(value)
+
+        # If the value is a list with a single element
+        # return the element for generic keys
+        if len(value) == 1:
+            return value[0]
+
         return value
     
     def get_priority(self) -> int:

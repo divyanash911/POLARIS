@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 
 from ...domain.models import AdaptationAction, ExecutionResult, ExecutionStatus, SystemState
 from ...domain.interfaces import ManagedSystemConnector
-from ...framework.events import PolarisEventBus, ExecutionResultEvent, EventMetadata
+from ...framework.events import PolarisEventBus, ExecutionResultEvent, EventMetadata, AdaptationEvent
 from ...framework.plugin_management import PolarisPluginRegistry, ManagedSystemConnectorFactory
 from ..base_adapter import (
     PolarisAdapter,
@@ -227,15 +227,47 @@ class ExecutionAdapter(PolarisAdapter):
     async def _start_processing(self) -> None:
         """Start action execution processing."""
         logger.info(f"ExecutionAdapter {self.adapter_id} processing started")
+        
+        # Subscribe to adaptation events
+        if self.event_bus:
+            self._adaptation_subscription_id = self.event_bus.subscribe(
+                AdaptationEvent,
+                self._handle_adaptation_event
+            )
+            logger.debug(f"Subscribed to adaptation events with ID: {self._adaptation_subscription_id}")
     
     async def _stop_processing(self) -> None:
         """Stop action execution processing."""
         logger.info(f"ExecutionAdapter {self.adapter_id} processing stopped")
+        
+        # Unsubscribe from adaptation events
+        if hasattr(self, '_adaptation_subscription_id') and self.event_bus:
+            await self.event_bus.unsubscribe(self._adaptation_subscription_id)
+            logger.debug("Unsubscribed from adaptation events")
+    
+    async def _handle_adaptation_event(self, event: AdaptationEvent) -> None:
+        """Handle an adaptation event by executing the suggested actions."""
+        if not event.suggested_actions:
+            logger.warning(f"No suggested actions in adaptation event: {event.event_id}")
+            return
+            
+        logger.info(f"Processing adaptation event {event.event_id} with {len(event.suggested_actions)} suggested actions")
+        
+        # Execute each suggested action
+        for action in event.suggested_actions:
+            try:
+                logger.info(f"Executing action: {action.action_type} on {action.target_system}")
+                result = await self.execute_action(action)
+                logger.info(f"Action {action.action_id} completed with status: {result.status}")
+            except Exception as e:
+                logger.error(f"Failed to execute action {action.action_id}: {e}")
     
     async def _cleanup_resources(self) -> None:
         """Clean up execution adapter resources."""
         self._execution_pipeline = None
         self.connector_factory = None
+        if hasattr(self, '_adaptation_subscription_id'):
+            del self._adaptation_subscription_id
         logger.info(f"ExecutionAdapter {self.adapter_id} resources cleaned up")
 
     async def execute_action(self, action: AdaptationAction) -> ExecutionResult:

@@ -93,7 +93,7 @@ class TelemetryEvent(PolarisEvent):
             "system_id": self.system_id,
             "system_state": {
                 "system_id": self.system_state.system_id,
-                "health_status": str(self.system_state.health_status),
+                "health_status": str(self.system_state.health_status.value),
                 "metrics_count": len(self.system_state.metrics) if self.system_state.metrics else 0,
                 "timestamp": self.system_state.timestamp.isoformat() if self.system_state.timestamp else None
             }
@@ -131,7 +131,15 @@ class AdaptationEvent(PolarisEvent):
             "system_id": self.system_id,
             "reason": self.reason,
             "severity": self.severity,
-            "suggested_actions_count": len(self.suggested_actions)
+            "suggested_actions_count": len(self.suggested_actions),
+            "suggested_actions": [
+                {
+                    "action_id": action.action_id,
+                    "action_type": action.action_type,
+                    "action_params": action.parameters
+                }
+                for action in self.suggested_actions
+            ]
         })
         return base_dict
 
@@ -217,6 +225,7 @@ class PolarisEventBus(Injectable):
         self._event_history: List[PolarisEvent] = []
         self._max_history_size = 1000
         self._correlation_tracker: Dict[str, List[str]] = defaultdict(list)
+        self._waiters: Dict[str, asyncio.Future] = {}
         self._processing_stats = {
             "events_published": 0,
             "events_processed": 0,
@@ -297,7 +306,6 @@ class PolarisEventBus(Injectable):
         
         if not subscription_ids:
             logger.debug(f"No subscribers for event type {event_type.__name__}")
-            return
         
         # Process each matching subscription
         for subscription_id in subscription_ids:
@@ -323,7 +331,15 @@ class PolarisEventBus(Injectable):
                         f"Event processing failed after retries",
                         event, subscription_id, e
                     )
-    
+            
+        logger.debug(f"Event {event.event_id} notified to all subscribers")
+        waiter_id = event.metadata.tags.get("waiter_id")
+        
+        if waiter_id and waiter_id in self._waiters:
+            logger.debug(f"Event {event.event_id} notified to waiter {waiter_id}")
+            future = self._waiters.pop(waiter_id)
+            future.set_result(None)
+            
     async def _invoke_handler(self, subscription: EventSubscription, event: PolarisEvent, worker_id: str) -> None:
         """Invoke a handler for an event."""
         handler = subscription.handler
@@ -357,6 +373,25 @@ class PolarisEventBus(Injectable):
             logger.error(f"Event queue is full, dropping event {event.event_id}")
             raise RuntimeError("Event queue is full")
     
+    async def publish_and_wait(self, event: PolarisEvent) -> None:
+        """
+        Publish an event and wait for it to be NOTIFIED to all subscribers.
+        Does not wait for processing to complete.
+        """
+        if "waiter_id" not in event.metadata.tags:
+            waiter_id = str(uuid.uuid4())
+            event.metadata.tags["waiter_id"] = waiter_id
+            
+            loop = asyncio.get_running_loop()
+            future = loop.create_future()
+            self._waiters[waiter_id] = future
+            
+            await self.publish(event)
+            await future
+        else:
+            # Event is already being waited on, just publish
+            await self.publish(event)
+
     async def publish_telemetry(self, telemetry: TelemetryEvent) -> None:
         """Publish a telemetry event."""
         await self.publish(telemetry)
