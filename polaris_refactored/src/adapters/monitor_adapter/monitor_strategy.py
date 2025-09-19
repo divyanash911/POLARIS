@@ -14,13 +14,17 @@ from typing import Optional
 from datetime import datetime, timezone
 
 from ...framework.plugin_management import ManagedSystemConnectorFactory
+from ...infrastructure.observability.factory import get_logger
 
 from .monitor_types import MonitoringTarget, CollectionResult
 
-logger = logging.getLogger(__name__)
+# Logger is provided by the adapter that uses these strategies
 
 class MetricCollectionStrategy(ABC):
     """Strategy interface for different metric collection approaches."""
+
+    def __init__(self):
+        self.logger = get_logger(f"polaris.adapters.monitor_strategy.{self.get_strategy_name()}")
     
     @abstractmethod
     async def collect_metrics(
@@ -102,7 +106,7 @@ class DirectConnectorStrategy(MetricCollectionStrategy):
             
         except Exception as e:
             end_time = datetime.now(timezone.utc)
-            logger.error(f"Failed to collect metrics from {target.system_id}: {e}")
+            self.logger.error(f"Failed to collect metrics from {target.system_id}: {e}")
             
             return CollectionResult(
                 system_id=target.system_id,

@@ -111,6 +111,18 @@ class DIContainer:
         
         return implementation(**kwargs)
     
+    def register(self, name: str, instance: Any) -> 'DIContainer':
+        """Register a service instance by name (for backward compatibility)."""
+        # Store by name for string-based lookups
+        self._singletons[name] = instance
+        return self
+    
+    def get(self, name: str) -> Any:
+        """Get a service by name (for backward compatibility)."""
+        if name in self._singletons:
+            return self._singletons[name]
+        raise ValueError(f"Service '{name}' is not registered")
+    
     def clear(self):
         """Clear all registrations (useful for testing)."""
         self._services.clear()

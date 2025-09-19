@@ -6,7 +6,6 @@ correlation tracking, and asynchronous event processing.
 """
 
 import asyncio
-import logging
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Callable, Set, Union
 from datetime import datetime, timezone
@@ -18,8 +17,7 @@ import weakref
 from ..domain.models import SystemState, AdaptationAction, ExecutionResult
 from ..domain.interfaces import EventHandler
 from ..infrastructure.di import Injectable
-
-logger = logging.getLogger(__name__)
+from ..infrastructure.observability.factory import get_framework_logger
 
 
 @dataclass
@@ -233,7 +231,10 @@ class PolarisEventBus(Injectable):
             "active_subscriptions": 0
         }
         
-        logger.info(f"PolarisEventBus initialized with {worker_count} workers")
+        # Use POLARIS logging
+        self.logger = get_framework_logger("event_bus")
+        
+        self.logger.info("PolarisEventBus initialized", extra={"worker_count": worker_count})
     
     async def start(self) -> None:
         """Start the event bus and processing workers."""
@@ -248,7 +249,7 @@ class PolarisEventBus(Injectable):
             worker = asyncio.create_task(self._event_worker(f"worker-{i}"))
             self._workers.append(worker)
         
-        logger.info(f"Event bus started with {len(self._workers)} workers")
+        self.logger.info("Event bus started", extra={"worker_count": len(self._workers)})
     
     async def stop(self) -> None:
         """Stop the event bus and cleanup resources."""
@@ -274,11 +275,11 @@ class PolarisEventBus(Injectable):
             except asyncio.QueueEmpty:
                 break
         
-        logger.info("Event bus stopped")
+        self.logger.info("Event bus stopped")
     
     async def _event_worker(self, worker_id: str) -> None:
         """Worker task that processes events from the queue."""
-        logger.info(f"Event worker {worker_id} started")
+        self.logger.info("Event worker started", extra={"worker_id": worker_id})
         
         while self._running:
             try:
@@ -290,10 +291,14 @@ class PolarisEventBus(Injectable):
             except asyncio.TimeoutError:
                 continue  # Normal timeout, check if still running
             except Exception as e:
-                logger.error(f"Event worker {worker_id} error: {e}")
+                self.logger.error("Event worker error", extra={
+                    "worker_id": worker_id,
+                    "error": str(e),
+                    "error_type": type(e).__name__
+                }, exc_info=e)
                 self._processing_stats["events_failed"] += 1
         
-        logger.info(f"Event worker {worker_id} stopped")
+        self.logger.info("Event worker stopped", extra={"worker_id": worker_id})
     
     async def _process_event(self, event: PolarisEvent, worker_id: str) -> None:
         """Process a single event by notifying all matching subscribers."""
@@ -305,7 +310,10 @@ class PolarisEventBus(Injectable):
         subscription_ids = self._event_type_subscriptions.get(event_type, [])
         
         if not subscription_ids:
-            logger.debug(f"No subscribers for event type {event_type.__name__}")
+            self.logger.debug("No subscribers for event type", extra={
+                "event_type": event_type.__name__,
+                "event_id": event.event_id
+            })
         
         # Process each matching subscription
         for subscription_id in subscription_ids:
@@ -318,25 +326,39 @@ class PolarisEventBus(Injectable):
                 event.mark_processed_by(subscription_id)
                 
             except Exception as e:
-                logger.error(f"Handler {subscription_id} failed to process event {event.event_id}: {e}")
+                self.logger.error("Handler failed to process event", extra={
+                    "subscription_id": subscription_id,
+                    "event_id": event.event_id,
+                    "error": str(e),
+                    "error_type": type(e).__name__
+                }, exc_info=e)
                 
                 # Retry logic
                 if event.metadata.retry_count < event.metadata.max_retries:
                     event.metadata.retry_count += 1
                     await self._event_queue.put(event)
-                    logger.info(f"Retrying event {event.event_id} (attempt {event.metadata.retry_count})")
+                    self.logger.info("Retrying event", extra={
+                        "event_id": event.event_id,
+                        "attempt": event.metadata.retry_count
+                    })
                 else:
-                    logger.error(f"Event {event.event_id} failed after {event.metadata.max_retries} retries")
+                    self.logger.error("Event failed after retries", extra={
+                        "event_id": event.event_id,
+                        "max_retries": event.metadata.max_retries
+                    })
                     raise EventProcessingError(
                         f"Event processing failed after retries",
                         event, subscription_id, e
                     )
             
-        logger.debug(f"Event {event.event_id} notified to all subscribers")
+        self.logger.debug("Event notified to all subscribers", extra={"event_id": event.event_id})
         waiter_id = event.metadata.tags.get("waiter_id")
         
         if waiter_id and waiter_id in self._waiters:
-            logger.debug(f"Event {event.event_id} notified to waiter {waiter_id}")
+            self.logger.debug("Event notified to waiter", extra={
+                "event_id": event.event_id,
+                "waiter_id": waiter_id
+            })
             future = self._waiters.pop(waiter_id)
             future.set_result(None)
             
@@ -368,9 +390,15 @@ class PolarisEventBus(Injectable):
         try:
             await self._event_queue.put(event)
             self._processing_stats["events_published"] += 1
-            logger.debug(f"Published event {event.event_id} of type {type(event).__name__}")
+            self.logger.debug("Published event", extra={
+                "event_id": event.event_id,
+                "event_type": type(event).__name__
+            })
         except asyncio.QueueFull:
-            logger.error(f"Event queue is full, dropping event {event.event_id}")
+            self.logger.error("Event queue is full, dropping event", extra={
+                "event_id": event.event_id,
+                "event_type": type(event).__name__
+            })
             raise RuntimeError("Event queue is full")
     
     async def publish_and_wait(self, event: PolarisEvent) -> None:
@@ -434,7 +462,10 @@ class PolarisEventBus(Injectable):
         self._event_type_subscriptions[event_type].append(subscription_id)
         self._processing_stats["active_subscriptions"] += 1
         
-        logger.info(f"Created subscription {subscription_id} for event type {event_type.__name__}")
+        self.logger.info("Created subscription", extra={
+            "subscription_id": subscription_id,
+            "event_type": event_type.__name__
+        })
         return subscription_id
     
     async def subscribe_to_telemetry(
@@ -485,7 +516,7 @@ class PolarisEventBus(Injectable):
         """
         subscription = self._subscriptions.get(subscription_id)
         if not subscription:
-            logger.warning(f"Subscription {subscription_id} not found")
+            self.logger.warning("Subscription not found", extra={"subscription_id": subscription_id})
             return False
         
         # Remove from subscriptions
@@ -498,7 +529,7 @@ class PolarisEventBus(Injectable):
         
         self._processing_stats["active_subscriptions"] -= 1
         
-        logger.info(f"Removed subscription {subscription_id}")
+        self.logger.info("Removed subscription", extra={"subscription_id": subscription_id})
         return True
     
     def get_correlated_events(self, correlation_id: str) -> List[str]:
@@ -554,7 +585,13 @@ class PolarisEventBus(Injectable):
                         handler(event)
                     replayed_count += 1
                 except Exception as e:
-                    logger.error(f"Error replaying event {event.event_id}: {e}")
+                    self.logger.error("Error replaying event", extra={
+                        "event_id": event.event_id,
+                        "error": str(e)
+                    })
         
-        logger.info(f"Replayed {replayed_count} events for correlation {correlation_id}")
+        self.logger.info("Replayed events for correlation", extra={
+            "correlation_id": correlation_id,
+            "replayed_count": replayed_count
+        })
         return replayed_count

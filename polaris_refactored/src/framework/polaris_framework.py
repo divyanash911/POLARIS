@@ -16,7 +16,8 @@ from ..infrastructure.message_bus import PolarisMessageBus
 from ..infrastructure.data_storage import PolarisDataStore
 from ..infrastructure.observability import (
     ObservabilityConfig, ObservabilityManager, get_logger, 
-    initialize_observability, shutdown_observability, observe_polaris_component
+    initialize_observability, shutdown_observability, observe_polaris_component,
+    configure_logging, get_framework_logger
 )
 from .configuration import PolarisConfiguration
 from .plugin_management import PolarisPluginRegistry
@@ -50,12 +51,12 @@ class PolarisFramework(Injectable):
         self.plugin_registry = plugin_registry
         self.event_bus = event_bus
         
-        # Initialize observability
+        # Initialize observability first
         self.observability_config = observability_config or ObservabilityConfig()
         self.observability_manager = initialize_observability(self.observability_config)
         
-        # Use POLARIS logger instead of standard logging
-        self.logger = get_logger("polaris.framework")
+        # Use POLARIS logger factory (will be configured during start())
+        self.logger = get_framework_logger("main")
         self._running = False
         self._components: List[str] = []
     
@@ -76,7 +77,17 @@ class PolarisFramework(Injectable):
             return
         
         try:
-            # Initialize observability first
+            # Configure logging early with framework configuration
+            try:
+                framework_config = self.configuration.get_framework_config()
+                configure_logging(framework_config.logging_config)
+            except Exception as e:
+                # If configuration fails, continue with default logging
+                self.logger.warning("Failed to configure logging from framework config", extra={
+                    "error": str(e)
+                })
+            
+            # Initialize observability
             await self.observability_manager.initialize()
             self.logger.info("Starting POLARIS framework...", extra={
                 "framework_version": "2.0.0",

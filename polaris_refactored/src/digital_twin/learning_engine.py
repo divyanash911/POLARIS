@@ -19,6 +19,7 @@ import uuid
 
 from ..domain.models import ExecutionResult, LearnedPattern
 from ..infrastructure.di import Injectable
+from ..infrastructure.observability.factory import get_digital_twin_logger
 from .knowledge_base import PolarisKnowledgeBase
 from .world_model import PolarisWorldModel
 
@@ -157,6 +158,9 @@ class PolarisLearningEngine(Injectable):
         ]
         self._world_model: Optional[PolarisWorldModel] = world_model
         self._kb: Optional[PolarisKnowledgeBase] = knowledge_base
+        
+        # Use POLARIS logging
+        self.logger = get_digital_twin_logger("learning_engine")
     
     async def learn_from_adaptation(self, adaptation_result: ExecutionResult) -> None:
         """Learn from an adaptation result.

@@ -4,3 +4,6 @@
 .vscode
 .kiro
 .coverage
+
+coverage.json
+htmlcov

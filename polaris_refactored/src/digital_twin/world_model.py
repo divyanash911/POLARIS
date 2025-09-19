@@ -23,6 +23,7 @@ from ..infrastructure.observability import (
     observe_polaris_component, trace_world_model_operation, get_logger,
     get_metrics_collector, get_tracer
 )
+from ..infrastructure.observability.factory import get_digital_twin_logger
 from .knowledge_base import PolarisKnowledgeBase
 
 
@@ -93,6 +94,9 @@ class CompositeWorldModel(PolarisWorldModel):
         self.models = models
         # Optional per-model weighting by class name
         self.weights = weights or {}
+        
+        # Use POLARIS logging
+        self.logger = get_digital_twin_logger("composite_world_model")
     
     async def update_system_state(self, telemetry: TelemetryEvent) -> None:
         """Update all constituent models."""
@@ -180,6 +184,9 @@ class StatisticalWorldModel(PolarisWorldModel):
         self._window = max(1, window)
         # In-memory rolling windows: system_id -> metric_name -> list[float]
         self._windows: Dict[str, Dict[str, List[float]]] = {}
+        
+        # Use POLARIS logging
+        self.logger = get_digital_twin_logger("statistical_world_model")
 
     async def update_system_state(self, telemetry: TelemetryEvent) -> None:
         state = telemetry.system_state
@@ -245,6 +252,9 @@ class MLWorldModel(PolarisWorldModel):
 
     def __init__(self, knowledge_base: Optional[PolarisKnowledgeBase] = None):
         self._kb = knowledge_base
+        
+        # Use POLARIS logging
+        self.logger = get_digital_twin_logger("ml_world_model")
 
     async def update_system_state(self, telemetry: TelemetryEvent) -> None:
         # In a future implementation, extract features and update an online model.

@@ -18,6 +18,7 @@ from datetime import datetime, timedelta, timezone
 from ..domain.models import SystemState, SystemDependency, LearnedPattern
 from ..framework.events import TelemetryEvent
 from ..infrastructure.di import Injectable
+from ..infrastructure.observability.factory import get_digital_twin_logger
 from ..infrastructure.data_storage import (
     PolarisDataStore,
     SystemStateRepository,
@@ -52,6 +53,9 @@ class PolarisKnowledgeBase(Injectable):
         self._patterns_repo: Optional[LearnedPatternRepository] = None
         self._actions_repo: Optional[AdaptationActionRepository] = None
         self._exec_results_repo: Optional[ExecutionResultRepository] = None
+        
+        # Use POLARIS logging
+        self.logger = get_digital_twin_logger("knowledge_base")
 
     def _states(self) -> SystemStateRepository:
         if self._states_repo is None:

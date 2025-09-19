@@ -33,7 +33,7 @@ from .execution_stages import (
     ActionExecutionStage, PostExecutionVerificationStage
 )
 
-logger = logging.getLogger(__name__)
+# Logger is provided by the base adapter class
 
 class ActionExecutionPipeline:
     """
@@ -42,10 +42,11 @@ class ActionExecutionPipeline:
     Executes ordered stages, handling errors and composing an ExecutionResult.
     """
     
-    def __init__(self, stages: List[ExecutionStage], event_bus: Optional[PolarisEventBus] = None, stage_timeouts: Optional[Dict[str, float]] = None):
+    def __init__(self, stages: List[ExecutionStage], event_bus: Optional[PolarisEventBus] = None, stage_timeouts: Optional[Dict[str, float]] = None, logger=None):
         self.stages = stages
         self.event_bus = event_bus
         self.stage_timeouts = stage_timeouts or {}
+        self.logger = logger
     
     async def execute(self, action: AdaptationAction, initial_context: Optional[Dict[str, Any]] = None) -> ExecutionResult:
         """Execute an action through the pipeline."""
@@ -82,7 +83,10 @@ class ActionExecutionPipeline:
                     else:
                         context = await stage.execute(action, context)
                 except Exception as e:
-                    logger.error(f"Stage {stage.__class__.__name__} failed: {e}")
+                    if self.logger:
+                        self.logger.error(f"Stage {stage.__class__.__name__} failed: {e}")
+                    else:
+                        print(f"Stage {stage.__class__.__name__} failed: {e}")
                     err_result = ExecutionResult(
                         action_id=action.action_id,
                         status=ExecutionStatus.FAILED,
@@ -115,7 +119,10 @@ class ActionExecutionPipeline:
             
             return context["execution_result"]
         except Exception as e:
-            logger.error(f"Pipeline execution error: {e}")
+            if self.logger:
+                self.logger.error(f"Pipeline execution error: {e}")
+            else:
+                print(f"Pipeline execution error: {e}")
             return ExecutionResult(
                 action_id=action.action_id,
                 status=ExecutionStatus.FAILED,
@@ -215,18 +222,19 @@ class ExecutionAdapter(PolarisAdapter):
             elif stype == "post_verification":
                 stages.append(PostExecutionVerificationStage(rules=verification_rules))
             else:
-                logger.warning(f"Unknown stage type in config: {stype}")
+                self.logger.warning(f"Unknown stage type in config: {stype}")
         
         self._execution_pipeline = ActionExecutionPipeline(
             stages=stages,
             event_bus=self.event_bus,
             stage_timeouts=stage_timeouts,
+            logger=self.logger,
         )
-        logger.info(f"Initialized ExecutionAdapter pipeline with {len(stages)} stages")
+        self.logger.info(f"Initialized ExecutionAdapter pipeline with {len(stages)} stages")
     
     async def _start_processing(self) -> None:
         """Start action execution processing."""
-        logger.info(f"ExecutionAdapter {self.adapter_id} processing started")
+        self.logger.info(f"ExecutionAdapter {self.adapter_id} processing started")
         
         # Subscribe to adaptation events
         if self.event_bus:
@@ -234,33 +242,33 @@ class ExecutionAdapter(PolarisAdapter):
                 AdaptationEvent,
                 self._handle_adaptation_event
             )
-            logger.debug(f"Subscribed to adaptation events with ID: {self._adaptation_subscription_id}")
+            self.logger.debug(f"Subscribed to adaptation events with ID: {self._adaptation_subscription_id}")
     
     async def _stop_processing(self) -> None:
         """Stop action execution processing."""
-        logger.info(f"ExecutionAdapter {self.adapter_id} processing stopped")
+        self.logger.info(f"ExecutionAdapter {self.adapter_id} processing stopped")
         
         # Unsubscribe from adaptation events
         if hasattr(self, '_adaptation_subscription_id') and self.event_bus:
             await self.event_bus.unsubscribe(self._adaptation_subscription_id)
-            logger.debug("Unsubscribed from adaptation events")
+            self.logger.debug("Unsubscribed from adaptation events")
     
     async def _handle_adaptation_event(self, event: AdaptationEvent) -> None:
         """Handle an adaptation event by executing the suggested actions."""
         if not event.suggested_actions:
-            logger.warning(f"No suggested actions in adaptation event: {event.event_id}")
+            self.logger.warning(f"No suggested actions in adaptation event: {event.event_id}")
             return
             
-        logger.info(f"Processing adaptation event {event.event_id} with {len(event.suggested_actions)} suggested actions")
+        self.logger.info(f"Processing adaptation event {event.event_id} with {len(event.suggested_actions)} suggested actions")
         
         # Execute each suggested action
         for action in event.suggested_actions:
             try:
-                logger.info(f"Executing action: {action.action_type} on {action.target_system}")
+                self.logger.info(f"Executing action: {action.action_type} on {action.target_system}")
                 result = await self.execute_action(action)
-                logger.info(f"Action {action.action_id} completed with status: {result.status}")
+                self.logger.info(f"Action {action.action_id} completed with status: {result.status}")
             except Exception as e:
-                logger.error(f"Failed to execute action {action.action_id}: {e}")
+                self.logger.error(f"Failed to execute action {action.action_id}: {e}")
     
     async def _cleanup_resources(self) -> None:
         """Clean up execution adapter resources."""
@@ -268,7 +276,7 @@ class ExecutionAdapter(PolarisAdapter):
         self.connector_factory = None
         if hasattr(self, '_adaptation_subscription_id'):
             del self._adaptation_subscription_id
-        logger.info(f"ExecutionAdapter {self.adapter_id} resources cleaned up")
+        self.logger.info(f"ExecutionAdapter {self.adapter_id} resources cleaned up")
 
     async def execute_action(self, action: AdaptationAction) -> ExecutionResult:
         """
@@ -304,7 +312,7 @@ class ExecutionAdapter(PolarisAdapter):
                         )
                     )
                 except Exception as e:
-                    logger.error(f"Failed to publish execution result event: {e}")
+                    self.logger.error(f"Failed to publish execution result event: {e}")
             
             # Update adapter metrics
             if result.status == ExecutionStatus.SUCCESS:

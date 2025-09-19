@@ -287,18 +287,24 @@ def _execute_with_observability(
     # Create metrics timer if enabled
     timer = None
     if auto_metrics:
-        # Create method-specific histogram if it doesn't exist
-        histogram_name = f"polaris_{component_name}_method_duration_seconds"
-        histogram = metrics.get_metric(histogram_name)
-        if not histogram:
-            histogram = metrics.register_histogram(
-                histogram_name,
-                f"Duration of {component_name} method calls",
-                labels=["method"]
-            )
-        
-        if histogram:
-            timer = Timer(histogram, labels={"method": method_name})
+        # Check if metrics object has get_metric method (PolarisMetricsCollector)
+        if hasattr(metrics, 'get_metric'):
+            # Create method-specific histogram if it doesn't exist
+            histogram_name = f"polaris_{component_name}_method_duration_seconds"
+            histogram = metrics.get_metric(histogram_name)
+            if not histogram:
+                histogram = metrics.register_histogram(
+                    histogram_name,
+                    f"Duration of {component_name} method calls",
+                    labels=["method"]
+                )
+            
+            if histogram:
+                timer = Timer(histogram, labels={"method": method_name})
+        else:
+            # For other metrics objects (like AdapterMetrics), skip histogram creation
+            # This maintains compatibility with different metrics implementations
+            pass
     
     # Execute with tracing if enabled
     if auto_trace:

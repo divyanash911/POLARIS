@@ -1,7 +1,24 @@
+"""
+Main pytest configuration file for POLARIS testing framework.
+
+This file configures pytest and provides global fixtures for all tests.
+It imports and makes available all the comprehensive testing utilities.
+"""
+
 import asyncio
 import json
 import pytest
 from typing import Any, Callable, Dict, List
+
+# Import all fixtures and utilities
+try:
+    from tests.fixtures.test_fixtures import *
+    from tests.fixtures.mock_objects import *
+    from tests.fixtures.logging_fixtures import *
+    from tests.utils.test_helpers import *
+except ImportError:
+    # Fallback for when imports fail - provide minimal functionality
+    pass
 
 
 class FakeMessageBroker:
@@ -57,6 +74,7 @@ class FakeMetricsCollector:
         self.counters[name] = self.counters.get(name, 0) + 1
 
 
+# Legacy fixtures for backward compatibility
 @pytest.fixture
 def fake_broker():
     return FakeMessageBroker()
@@ -65,3 +83,67 @@ def fake_broker():
 @pytest.fixture
 def metrics_collector():
     return FakeMetricsCollector()
+
+
+# Pytest configuration hooks
+def pytest_configure(config):
+    """Configure pytest with custom markers and settings."""
+    # Register custom markers
+    config.addinivalue_line("markers", "unit: Unit tests that run in isolation")
+    config.addinivalue_line("markers", "integration: Integration tests that require external dependencies")
+    config.addinivalue_line("markers", "performance: Performance tests that measure system performance")
+    config.addinivalue_line("markers", "slow: Tests that take longer than usual to complete")
+    config.addinivalue_line("markers", "flaky: Tests that may occasionally fail due to timing issues")
+
+
+def pytest_addoption(parser):
+    """Add custom command line options."""
+    parser.addoption(
+        "--integration",
+        action="store_true",
+        default=False,
+        help="Run integration tests"
+    )
+    parser.addoption(
+        "--performance",
+        action="store_true",
+        default=False,
+        help="Run performance tests"
+    )
+    parser.addoption(
+        "--coverage-threshold",
+        type=float,
+        default=80.0,
+        help="Minimum coverage threshold percentage"
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    """Modify test collection to handle custom markers."""
+    # Skip integration tests unless --integration is specified
+    if not config.getoption("--integration"):
+        skip_integration = pytest.mark.skip(reason="need --integration option to run")
+        for item in items:
+            if "integration" in item.keywords:
+                item.add_marker(skip_integration)
+    
+    # Skip performance tests unless --performance is specified
+    if not config.getoption("--performance"):
+        skip_performance = pytest.mark.skip(reason="need --performance option to run")
+        for item in items:
+            if "performance" in item.keywords:
+                item.add_marker(skip_performance)
+
+
+@pytest.fixture(scope="session")
+def coverage_threshold(request):
+    """Provide the coverage threshold from command line."""
+    return request.config.getoption("--coverage-threshold")
+
+
+@pytest.fixture(autouse=True)
+def setup_test_environment():
+    """Automatically set up test environment for each test."""
+    # This runs before each test
+    yield
+    # Cleanup after each test if needed

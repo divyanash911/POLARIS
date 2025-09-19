@@ -4,15 +4,12 @@ Core configuration management class.
 
 import threading
 import time
-import logging
 from typing import Dict, Any, Optional, List, Callable
 
 from ...infrastructure.di import Injectable
 from .models import FrameworkConfiguration, ManagedSystemConfiguration
 from .sources import ConfigurationSource, YAMLConfigurationSource
 from .validation import ConfigurationValidator
-
-logger = logging.getLogger(__name__)
 
 
 class PolarisConfiguration(Injectable):
@@ -32,6 +29,15 @@ class PolarisConfiguration(Injectable):
         self._hot_reload_thread: Optional[threading.Thread] = None
         self._stop_hot_reload = threading.Event()
         self._config_lock = threading.RLock()
+        
+        # Use POLARIS logging - import here to avoid circular import
+        try:
+            from ...infrastructure.observability.factory import get_infrastructure_logger
+            self.logger = get_infrastructure_logger("configuration")
+        except ImportError:
+            # Fallback to basic logging if observability not available yet
+            import logging
+            self.logger = logging.getLogger("polaris.configuration")
         
         if self._sources:
             self._load_configuration()
@@ -55,14 +61,14 @@ class PolarisConfiguration(Injectable):
                 source_config = source.load()
                 merged_config = self._deep_merge(merged_config, source_config)
             except Exception as e:
-                logger.error(f"Failed to load configuration from source: {type(source).__name__}: {e}")
+                self.logger.error(f"Failed to load configuration from source: {type(source).__name__}: {e}")
                 raise
         
         # Validate the merged configuration
         try:
             ConfigurationValidator.validate_configuration(merged_config)
         except Exception as e:
-            logger.error(f"Configuration validation failed: {e}")
+            self.logger.error(f"Configuration validation failed: {e}")
             raise
         
         with self._config_lock:
@@ -98,7 +104,7 @@ class PolarisConfiguration(Injectable):
                     self._managed_systems[system_id] = ManagedSystemConfiguration(**system_config)
                     
         except Exception as e:
-            logger.error(f"Failed to parse configurations: {e}")
+            self.logger.error(f"Failed to parse configurations: {e}")
             raise
     
     def get_framework_config(self) -> FrameworkConfiguration:
@@ -129,10 +135,10 @@ class PolarisConfiguration(Injectable):
                 try:
                     callback()
                 except Exception as e:
-                    logger.error(f"Error in reload callback: {e}")
+                    self.logger.error(f"Error in reload callback: {e}")
                     
         except Exception as e:
-            logger.error(f"Failed to reload configuration: {e}")
+            self.logger.error(f"Failed to reload configuration: {e}")
             raise
     
     def get_raw_config(self) -> Dict[str, Any]:
@@ -175,14 +181,14 @@ class PolarisConfiguration(Injectable):
                             break
                 
                 if reload_needed:
-                    logger.info("Configuration file changed, reloading...")
+                    self.logger.info("Configuration file changed, reloading...")
                     self.reload_configuration()
                 
                 # Wait before next check
                 self._stop_hot_reload.wait(1.0)  # Check every second
                 
             except Exception as e:
-                logger.error(f"Error in hot-reload monitoring: {e}")
+                self.logger.error(f"Error in hot-reload monitoring: {e}")
                 self._stop_hot_reload.wait(5.0)  # Wait longer on error
     
     def stop_hot_reload(self) -> None:
@@ -191,7 +197,7 @@ class PolarisConfiguration(Injectable):
             self._stop_hot_reload.set()
             self._hot_reload_thread.join(timeout=5.0)
             self._hot_reload_thread = None
-            logger.info("Hot-reload monitoring stopped")
+            self.logger.info("Hot-reload monitoring stopped")
     
     def is_hot_reload_enabled(self) -> bool:
         """Check if hot-reload is enabled."""

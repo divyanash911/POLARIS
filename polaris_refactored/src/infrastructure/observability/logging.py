@@ -110,6 +110,7 @@ class FileLogHandler(LogHandler):
         formatted_message = self.formatter.format(record)
         with open(self.file_path, 'a', encoding='utf-8') as f:
             f.write(formatted_message + '\n')
+            f.flush()  # Ensure immediate write to disk
 
 
 class PolarisLogger:

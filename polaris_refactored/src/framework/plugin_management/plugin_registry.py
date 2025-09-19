@@ -5,7 +5,6 @@ Main registry for managing plugin lifecycle, hot-reloading, and connector manage
 """
 
 import asyncio
-import logging
 import threading
 import time
 from pathlib import Path
@@ -16,8 +15,7 @@ from .plugin_discovery import PluginDiscovery
 from ...domain.interfaces import ManagedSystemConnector
 from ...infrastructure.di import Injectable
 from ...infrastructure.exceptions import ConnectorError
-
-logger = logging.getLogger(__name__)
+from ...infrastructure.observability.factory import get_framework_logger
 
 
 class PolarisPluginRegistry(Injectable):
@@ -43,7 +41,10 @@ class PolarisPluginRegistry(Injectable):
         self._registry_lock = threading.RLock()
         self._discovery = PluginDiscovery()
         
-        logger.info("PolarisPluginRegistry initialized")
+        # Use POLARIS logging
+        self.logger = get_framework_logger("plugin_registry")
+        
+        self.logger.info("PolarisPluginRegistry initialized")
     
     async def initialize(self, search_paths: Optional[List[Path]] = None, enable_hot_reload: bool = False) -> None:
         """Initialize the plugin registry with discovery and optional hot-reloading."""
@@ -60,17 +61,17 @@ class PolarisPluginRegistry(Injectable):
             if self._hot_reload_enabled:
                 self._start_hot_reload_monitoring()
             
-            logger.info(
-                "Plugin registry initialized",
-                extra={
-                    "search_paths": [str(p) for p in self._search_paths],
-                    "discovered_plugins": len(self._plugin_descriptors),
-                    "hot_reload_enabled": self._hot_reload_enabled
-                }
-            )
+            self.logger.info("Plugin registry initialized", extra={
+                "search_paths": [str(p) for p in self._search_paths],
+                "discovered_plugins": len(self._plugin_descriptors),
+                "hot_reload_enabled": self._hot_reload_enabled
+            })
             
         except Exception as e:
-            logger.error(f"Failed to initialize plugin registry: {e}")
+            self.logger.error("Failed to initialize plugin registry", extra={
+                "error": str(e),
+                "error_type": type(e).__name__
+            }, exc_info=e)
             raise ConnectorError(
                 message="Plugin registry initialization failed",
                 context={"error": str(e)},
@@ -94,10 +95,13 @@ class PolarisPluginRegistry(Injectable):
                 self._plugin_descriptors.clear()
                 self._loaded_modules.clear()
             
-            logger.info("Plugin registry shutdown completed")
+            self.logger.info("Plugin registry shutdown completed")
             
         except Exception as e:
-            logger.error(f"Error during plugin registry shutdown: {e}")
+            self.logger.error("Error during plugin registry shutdown", extra={
+                "error": str(e),
+                "error_type": type(e).__name__
+            }, exc_info=e)
             raise
     
     async def _discover_all_plugins(self) -> None:
@@ -111,12 +115,15 @@ class PolarisPluginRegistry(Injectable):
                 self._plugin_descriptors[plugin.plugin_id] = plugin
                 
                 if plugin.is_valid:
-                    logger.info(f"Valid plugin discovered: {plugin.plugin_id} v{plugin.version}")
+                    self.logger.info("Valid plugin discovered", extra={
+                        "plugin_id": plugin.plugin_id,
+                        "version": plugin.version
+                    })
                 else:
-                    logger.warning(
-                        f"Invalid plugin discovered: {plugin.plugin_id}",
-                        extra={"validation_errors": plugin.validation_errors}
-                    )
+                    self.logger.warning("Invalid plugin discovered", extra={
+                        "plugin_id": plugin.plugin_id,
+                        "validation_errors": plugin.validation_errors
+                    })
     
     def load_managed_system_connector(self, system_id: str) -> Optional[ManagedSystemConnector]:
         """Load a managed system connector by system ID."""
@@ -128,14 +135,14 @@ class PolarisPluginRegistry(Injectable):
             # Find plugin descriptor
             plugin = self._plugin_descriptors.get(system_id)
             if not plugin:
-                logger.error(f"Plugin not found: {system_id}")
+                self.logger.error("Plugin not found", extra={"system_id": system_id})
                 return None
             
             if not plugin.is_valid:
-                logger.error(
-                    f"Cannot load invalid plugin: {system_id}",
-                    extra={"validation_errors": plugin.validation_errors}
-                )
+                self.logger.error("Cannot load invalid plugin", extra={
+                    "system_id": system_id,
+                    "validation_errors": plugin.validation_errors
+                })
                 return None
             
             try:
@@ -143,12 +150,17 @@ class PolarisPluginRegistry(Injectable):
                 connector = self._discovery.load_connector_from_plugin(plugin, self._loaded_modules)
                 if connector:
                     self._connectors[system_id] = connector
-                    logger.info(f"Connector loaded successfully: {system_id}")
+                    self.logger.info("Connector loaded successfully", extra={"system_id": system_id})
                 
                 return connector
                 
             except Exception as e:
-                logger.error(f"Failed to load connector {system_id}: {e}")
+                self.logger.error("Failed to load connector", extra={
+                    "system_id": system_id,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "plugin_path": str(plugin.path)
+                }, exc_info=e)
                 raise ConnectorError(
                     message=f"Failed to load connector: {system_id}",
                     context={"system_id": system_id, "plugin_path": str(plugin.path)},
@@ -166,7 +178,10 @@ class PolarisPluginRegistry(Injectable):
                         try:
                             await connector.disconnect()
                         except Exception as e:
-                            logger.warning(f"Error disconnecting connector during reload: {e}")
+                            self.logger.warning("Error disconnecting connector during reload", extra={
+                                "system_id": system_id,
+                                "error": str(e)
+                            })
                     
                     del self._connectors[system_id]
                 
@@ -187,12 +202,16 @@ class PolarisPluginRegistry(Injectable):
                             plugin.last_modified = module_file.stat().st_mtime
                     
                     # Note: Don't reload the connector automatically, just clean up
-                    logger.info(f"Plugin unloaded for reload: {system_id}")
+                    self.logger.info("Plugin unloaded for reload", extra={"system_id": system_id})
                 else:
-                    logger.error(f"Plugin descriptor not found for reload: {system_id}")
+                    self.logger.error("Plugin descriptor not found for reload", extra={"system_id": system_id})
                 
             except Exception as e:
-                logger.error(f"Error reloading plugin {system_id}: {e}")
+                self.logger.error("Error reloading plugin", extra={
+                    "system_id": system_id,
+                    "error": str(e),
+                    "error_type": type(e).__name__
+                }, exc_info=e)
                 raise ConnectorError(
                     message=f"Failed to reload plugin: {system_id}",
                     context={"system_id": system_id},
@@ -209,9 +228,12 @@ class PolarisPluginRegistry(Injectable):
                     try:
                         connector = self.load_managed_system_connector(plugin.plugin_id)
                         if connector:
-                            logger.info(f"Auto-loaded connector: {plugin.plugin_id}")
+                            self.logger.info("Auto-loaded connector", extra={"plugin_id": plugin.plugin_id})
                     except Exception as e:
-                        logger.error(f"Failed to auto-load connector {plugin.plugin_id}: {e}")
+                        self.logger.error("Failed to auto-load connector", extra={
+                            "plugin_id": plugin.plugin_id,
+                            "error": str(e)
+                        })
     
     async def unload_all_connectors(self) -> None:
         """Unload all connectors and cleanup resources."""
@@ -221,11 +243,14 @@ class PolarisPluginRegistry(Injectable):
                     if hasattr(connector, 'disconnect'):
                         await connector.disconnect()
                 except Exception as e:
-                    logger.warning(f"Error disconnecting connector {system_id}: {e}")
+                    self.logger.warning("Error disconnecting connector", extra={
+                        "system_id": system_id,
+                        "error": str(e)
+                    })
             
             self._connectors.clear()
             self._loaded_modules.clear()
-            logger.info("All connectors unloaded")
+            self.logger.info("All connectors unloaded")
     
     def get_loaded_connectors(self) -> Dict[str, ManagedSystemConnector]:
         """Get all currently loaded connectors."""
@@ -258,7 +283,7 @@ class PolarisPluginRegistry(Injectable):
             daemon=True
         )
         self._hot_reload_thread.start()
-        logger.info("Hot-reload monitoring started")
+        self.logger.info("Hot-reload monitoring started")
     
     def _hot_reload_worker(self) -> None:
         """Background worker for hot-reload monitoring."""
@@ -277,16 +302,22 @@ class PolarisPluginRegistry(Injectable):
                 # Reload changed plugins
                 for plugin_id in reload_needed:
                     try:
-                        logger.info(f"Plugin file changed, reloading: {plugin_id}")
+                        self.logger.info("Plugin file changed, reloading", extra={"plugin_id": plugin_id})
                         asyncio.run(self.reload_plugin(plugin_id))
                     except Exception as e:
-                        logger.error(f"Hot-reload failed for {plugin_id}: {e}")
+                        self.logger.error("Hot-reload failed", extra={
+                            "plugin_id": plugin_id,
+                            "error": str(e)
+                        })
                 
                 # Wait before next check
                 self._stop_hot_reload.wait(2.0)  # Check every 2 seconds
                 
             except Exception as e:
-                logger.error(f"Error in hot-reload monitoring: {e}")
+                self.logger.error("Error in hot-reload monitoring", extra={
+                    "error": str(e),
+                    "error_type": type(e).__name__
+                })
                 self._stop_hot_reload.wait(5.0)  # Wait longer on error
     
     def _get_plugin_mtime(self, plugin: PluginDescriptor) -> float:

@@ -28,7 +28,7 @@ from .monitor_strategy import (
 
 from polaris_refactored.src.domain.models import MetricValue
 
-logger = logging.getLogger(__name__)
+# Logger is provided by the base adapter class
 
 
 class MonitorAdapter(PolarisAdapter):
@@ -73,7 +73,7 @@ class MonitorAdapter(PolarisAdapter):
             "last_collection_time": None
         }
         
-        logger.info(f"MonitorAdapter {self.adapter_id} initialized")
+        self.logger.info(f"MonitorAdapter {self.adapter_id} initialized")
     
     async def _validate_configuration(self) -> None:
         """Validate monitor adapter configuration."""
@@ -128,7 +128,7 @@ class MonitorAdapter(PolarisAdapter):
                 ["plugin_registry must be provided to create connectors"]
             )
         
-        logger.info(f"MonitorAdapter {self.adapter_id} configuration validated successfully")
+        self.logger.info(f"MonitorAdapter {self.adapter_id} configuration validated successfully")
     
     async def _initialize_resources(self) -> None:
         """Initialize monitor adapter resources."""
@@ -182,15 +182,15 @@ class MonitorAdapter(PolarisAdapter):
                 if isinstance(target.config, dict):
                     preferred = target.config.get("collection_strategy")
                 if preferred and preferred not in self._collection_strategies:
-                    logger.warning(
+                    self.logger.warning(
                         f"Unknown collection_strategy '{preferred}' for system '{system_id}'. "
                         f"Available strategies: {list(self._collection_strategies.keys())}. "
                         f"Falling back to default strategy."
                     )
         except Exception as e:
-            logger.error(f"Error during post-initialization strategy validation: {e}")
+            self.logger.error(f"Error during post-initialization strategy validation: {e}")
 
-        logger.info(f"MonitorAdapter {self.adapter_id} resources initialized")
+        self.logger.info(f"MonitorAdapter {self.adapter_id} resources initialized")
     
     async def _start_processing(self) -> None:
         """Start metric collection processing."""
@@ -207,9 +207,9 @@ class MonitorAdapter(PolarisAdapter):
                         name=f"collection_{system_id}"
                     )
                     self._collection_tasks[system_id] = task
-                    logger.info(f"Started collection task for {system_id}")
+                    self.logger.info(f"Started collection task for {system_id}")
         
-        logger.info(f"MonitorAdapter {self.adapter_id} processing started")
+        self.logger.info(f"MonitorAdapter {self.adapter_id} processing started")
     
     async def _stop_processing(self) -> None:
         """Stop metric collection processing."""
@@ -220,13 +220,13 @@ class MonitorAdapter(PolarisAdapter):
                 await task
             except asyncio.CancelledError:
                 pass
-            logger.info(f"Stopped collection task for {system_id}")
+            self.logger.info(f"Stopped collection task for {system_id}")
         
         self._collection_tasks.clear()
         
         # Stop PUSH subscriptions if any
         await self._stop_push_subscriptions()
-        logger.info(f"MonitorAdapter {self.adapter_id} processing stopped")
+        self.logger.info(f"MonitorAdapter {self.adapter_id} processing stopped")
     
     async def _cleanup_resources(self) -> None:
         """Clean up monitor adapter resources."""
@@ -240,11 +240,11 @@ class MonitorAdapter(PolarisAdapter):
         # Reset connector factory
         self.connector_factory = None
         
-        logger.info(f"MonitorAdapter {self.adapter_id} resources cleaned up")
+        self.logger.info(f"MonitorAdapter {self.adapter_id} resources cleaned up")
     
     async def _collection_loop(self, target: MonitoringTarget) -> None:
         """Main collection loop for a monitoring target."""
-        logger.info(f"Starting collection loop for {target.system_id}")
+        self.logger.info(f"Starting collection loop for {target.system_id}")
         
         while self.is_running():
             try:
@@ -280,12 +280,12 @@ class MonitorAdapter(PolarisAdapter):
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"Error in collection loop for {target.system_id}: {e}")
+                self.logger.error(f"Error in collection loop for {target.system_id}: {e}")
                 self.update_metrics(failed=1)
                 
                 # Wait before retrying
                 await asyncio.sleep(min(target.collection_interval, 30.0))        
-        logger.info(f"Collection loop stopped for {target.system_id}")
+        self.logger.info(f"Collection loop stopped for {target.system_id}")
     
     async def _collect_target_metrics(self, target: MonitoringTarget) -> CollectionResult:
         """Collect metrics for a specific target."""
@@ -353,10 +353,10 @@ class MonitorAdapter(PolarisAdapter):
             # Publish event
             await self.event_bus.publish_telemetry(event)
             
-            logger.debug(f"Published telemetry event for {result.system_id}")
+            self.logger.debug(f"Published telemetry event for {result.system_id}")
             
         except Exception as e:
-            logger.error(f"Failed to publish telemetry event for {result.system_id}: {e}")
+            self.logger.error(f"Failed to publish telemetry event for {result.system_id}: {e}")
 
     async def _start_push_subscriptions(self) -> None:
         """Start push-based telemetry subscriptions if connectors support it."""
@@ -369,7 +369,7 @@ class MonitorAdapter(PolarisAdapter):
             try:
                 connector = self.plugin_registry.get_loaded_connectors().get(target.connector_type)
                 if connector is None:
-                    logger.warning(f"Connector {target.connector_type} not found, creating new instance")   
+                    self.logger.warning(f"Connector {target.connector_type} not found, creating new instance")   
                     connector = self.connector_factory.create_connector(target.connector_type, target.config)
                 
                 if hasattr(connector, "subscribe_telemetry") and callable(getattr(connector, "subscribe_telemetry")):
@@ -408,19 +408,19 @@ class MonitorAdapter(PolarisAdapter):
                             await self.event_bus.publish_telemetry(event)
                         
                         except Exception as ex:
-                            logger.error(f"Push telemetry handler error for {system_id}: {ex}")
+                            self.logger.error(f"Push telemetry handler error for {system_id}: {ex}")
                     
                     token = connector.subscribe_telemetry(handler)
                     self._push_subscriptions[system_id] = {
                         "connector": connector,
                         "token": token,
                     }
-                    logger.info(f"Subscribed to push telemetry for {system_id}")
+                    self.logger.info(f"Subscribed to push telemetry for {system_id}")
                 else:
-                    logger.warning(f"Connector for {system_id} does not support push telemetry subscription")
+                    self.logger.warning(f"Connector for {system_id} does not support push telemetry subscription")
             
             except Exception as e:
-                logger.error(f"Failed to start push subscription for {system_id}: {e}")
+                self.logger.error(f"Failed to start push subscription for {system_id}: {e}")
 
     async def _stop_push_subscriptions(self) -> None:
         """Stop push-based telemetry subscriptions if previously started."""
@@ -431,9 +431,9 @@ class MonitorAdapter(PolarisAdapter):
             try:
                 if connector and hasattr(connector, "unsubscribe") and callable(getattr(connector, "unsubscribe")) and token is not None:
                     connector.unsubscribe(token)
-                    logger.info(f"Unsubscribed push telemetry for {system_id}")
+                    self.logger.info(f"Unsubscribed push telemetry for {system_id}")
             except Exception as e:
-                logger.error(f"Failed to stop push subscription for {system_id}: {e}")
+                self.logger.error(f"Failed to stop push subscription for {system_id}: {e}")
             finally:
                 subs.pop(system_id, None)
     
@@ -481,7 +481,7 @@ class MonitorAdapter(PolarisAdapter):
             return AdapterHealthStatus.HEALTHY
             
         except Exception as e:
-            logger.error(f"Health check failed for MonitorAdapter {self.adapter_id}: {e}")
+            self.logger.error(f"Health check failed for MonitorAdapter {self.adapter_id}: {e}")
             return AdapterHealthStatus.UNHEALTHY
     
     def add_monitoring_target(self, target: MonitoringTarget) -> None:
@@ -499,7 +499,7 @@ class MonitorAdapter(PolarisAdapter):
                 name=f"collection_{target.system_id}"
             )
             self._collection_tasks[target.system_id] = task
-            logger.info(f"Added monitoring target and started collection for {target.system_id}")
+            self.logger.info(f"Added monitoring target and started collection for {target.system_id}")
     
     def remove_monitoring_target(self, system_id: str) -> bool:
         """Remove a monitoring target."""
@@ -514,7 +514,7 @@ class MonitorAdapter(PolarisAdapter):
         
         # Remove target
         del self._monitoring_targets[system_id]
-        logger.info(f"Removed monitoring target {system_id}")
+        self.logger.info(f"Removed monitoring target {system_id}")
         return True
     
     def get_monitoring_targets(self) -> Dict[str, MonitoringTarget]:
@@ -535,7 +535,7 @@ class MonitorAdapter(PolarisAdapter):
     def add_collection_strategy(self, strategy: MetricCollectionStrategy) -> None:
         """Add a new collection strategy."""
         self._collection_strategies[strategy.get_strategy_name()] = strategy
-        logger.info(f"Added collection strategy: {strategy.get_strategy_name()}")
+        self.logger.info(f"Added collection strategy: {strategy.get_strategy_name()}")
     
     def set_default_strategy(self, strategy_name: str) -> bool:
         """Set the default collection strategy."""
@@ -543,5 +543,5 @@ class MonitorAdapter(PolarisAdapter):
             return False
         
         self._default_strategy = self._collection_strategies[strategy_name]
-        logger.info(f"Set default collection strategy to: {strategy_name}")
+        self.logger.info(f"Set default collection strategy to: {strategy_name}")
         return True

@@ -23,6 +23,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta, timezone
 
 from ..infrastructure.di import Injectable
+from ..infrastructure.observability.factory import get_control_logger
 from ..digital_twin.knowledge_base import PolarisKnowledgeBase
 
 
@@ -322,6 +323,9 @@ class PolarisReasoningEngine(Injectable):
             ExperienceBasedReasoningStrategy(knowledge_base=knowledge_base)
         ]
         self._fusion_strategy = fusion_strategy or ResultFusionStrategy()
+        
+        # Use POLARIS logging
+        self.logger = get_control_logger("reasoning_engine")
     
     async def reason(self, context: ReasoningContext) -> ReasoningResult:
         """Perform reasoning using all available strategies and fuse results."""

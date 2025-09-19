@@ -17,6 +17,12 @@ from .integration import (
     trace_connector_operation, initialize_observability, shutdown_observability,
     get_observability_manager
 )
+from .factory import (
+    LoggerFactory, configure_logging, get_polaris_logger, is_logging_configured,
+    get_logging_configuration, reset_logging, get_framework_logger, get_infrastructure_logger,
+    get_adapter_logger, get_digital_twin_logger, get_control_logger, get_test_logger,
+    TemporaryLoggingConfig
+)
 
 __all__ = [
     # Core observability components
@@ -47,4 +53,19 @@ __all__ = [
     "initialize_observability",
     "shutdown_observability",
     "get_observability_manager",
+    
+    # Logger factory and utilities
+    "LoggerFactory",
+    "configure_logging",
+    "get_polaris_logger",
+    "is_logging_configured",
+    "get_logging_configuration",
+    "reset_logging",
+    "get_framework_logger",
+    "get_infrastructure_logger",
+    "get_adapter_logger",
+    "get_digital_twin_logger",
+    "get_control_logger",
+    "get_test_logger",
+    "TemporaryLoggingConfig",
 ]
