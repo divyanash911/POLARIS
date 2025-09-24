@@ -23,10 +23,15 @@ from datetime import datetime, timezone
 # Add the src directory to the path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from swim_driver import SwimPolarisDriver, SystemStatus
-from config_manager import HierarchicalConfigurationManager
-from logging_system import SwimPolarisLoggingSystem, log_context
-from metrics_system import SwimPolarisMetricsSystem, ComponentStatus
+try:
+    from swim_driver import SwimPolarisDriver, SystemStatus
+    from config_manager import HierarchicalConfigurationManager
+    from logging_system import SwimPolarisLoggingSystem, log_context
+    from metrics_system import SwimPolarisMetricsSystem, ComponentStatus
+except ImportError as e:
+    print(f"Import error: {e}")
+    print("Please ensure all required modules are available")
+    sys.exit(1)
 
 
 class DependencyChecker:

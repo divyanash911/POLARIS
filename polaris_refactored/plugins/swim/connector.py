@@ -12,8 +12,8 @@ import time
 from typing import Any, Dict, Optional, List
 from datetime import datetime, timezone
 
-from ...src.domain.interfaces import ManagedSystemConnector
-from ...src.domain.models import (
+from polaris_refactored.src.domain.interfaces import ManagedSystemConnector
+from polaris_refactored.src.domain.models import (
     SystemState, AdaptationAction, ExecutionResult, MetricValue, HealthStatus, ExecutionStatus
 )
 
@@ -116,7 +116,7 @@ class SwimTCPConnector(ManagedSystemConnector):
             server_count = int(await self._execute_swim_command("get_servers"))
             active_servers = int(await self._execute_swim_command("get_active_servers"))
             max_servers = int(await self._execute_swim_command("get_max_servers"))
-            dimmer = float(await self._execute_swim_command("dimmer"))
+            dimmer = float(await self._execute_swim_command("get_dimmer"))
             
             # Create metric values
             metrics["server_count"] = MetricValue(
@@ -171,15 +171,24 @@ class SwimTCPConnector(ManagedSystemConnector):
                 pass  # Optional metric
             
             # Calculate derived metrics
-            if active_servers > 0 and max_servers > 0:
-                utilization = active_servers / max_servers
+            server_utilization = 0
+            sucess = 0
+            for server in range(1, active_servers + 1):
+                try:
+                    util = float(await self._execute_swim_command(f"get_utilization {server}"))
+                    server_utilization += util
+                    sucess += 1
+                except Exception:
+                    pass  # Optional metric
+            
+            if sucess > 0:
                 metrics["server_utilization"] = MetricValue(
                     name="server_utilization",
-                    value=utilization,
+                    value=server_utilization / sucess,
                     unit="ratio",
                     timestamp=datetime.now(timezone.utc)
                 )
-            
+
             return metrics
             
         except Exception as e:

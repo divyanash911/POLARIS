@@ -13,10 +13,17 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Any, Tuple, Deque
 from enum import Enum
+from pathlib import Path
+import sys
 
+polaris_root = Path(__file__).parent.parent.parent.parent.parent.parent
+sys.path.append(str(polaris_root))
 from polaris_refactored.src.domain.models import SystemState, MetricValue, HealthStatus
 from polaris_refactored.src.framework.events import TelemetryEvent
-from .swim_adaptation_strategies import SwimMetrics
+
+src_root = Path(__file__).parent
+sys.path.append(str(src_root))
+from swim_adaptation_strategies import SwimMetrics
 
 
 class MetricQuality(Enum):
@@ -408,13 +415,13 @@ class SwimMetricsProcessor:
             "avg_processing_time": 0.0
         }
     
-    async def process_telemetry_event(self, event: TelemetryEvent) -> ProcessedMetrics:
+    async def process_telemetry_event(self, system_state: SystemState) -> ProcessedMetrics:
         """Process a telemetry event from SWIM."""
         start_time = datetime.now(timezone.utc)
         
         try:
             # Extract raw metrics
-            raw_metrics = event.system_state.metrics
+            raw_metrics = system_state.metrics
             
             # Validate metrics
             quality_info = {}
@@ -461,7 +468,7 @@ class SwimMetricsProcessor:
         
         except Exception as e:
             self.processing_stats["processing_errors"] += 1
-            self.logger.error(f"Failed to process telemetry event: {e}")
+            self.logger.error(f"Failed to process system state: {e}")
             raise
     
     def _get_historical_values(self, metric_name: str) -> List[Any]:

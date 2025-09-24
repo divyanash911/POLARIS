@@ -12,7 +12,11 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any, Tuple
 from enum import Enum
+from pathlib import Path
+import sys
 
+polaris_root = Path(__file__).parent.parent.parent.parent.parent.parent
+sys.path.append(str(polaris_root))
 from polaris_refactored.src.domain.models import (
     SystemState, AdaptationAction, MetricValue, HealthStatus
 )

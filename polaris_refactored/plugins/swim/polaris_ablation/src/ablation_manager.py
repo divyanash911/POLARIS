@@ -15,8 +15,12 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass, asdict
 from enum import Enum
+from pathlib import Path
+import sys
 
-from .swim_driver import SwimPolarisDriver, SystemStatus
+src_root = Path(__file__).parent
+sys.path.append(str(src_root))
+from swim_driver import SwimPolarisDriver, SystemStatus
 
 
 class AblationStudyStatus(Enum):

@@ -10,39 +10,227 @@ import logging
 import signal
 import sys
 import yaml
+import importlib.util
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
 
-# POLARIS framework imports
-from polaris_refactored.src.framework.polaris_framework import PolarisFramework
-from polaris_refactored.src.framework.configuration.configuration_builder import ConfigurationBuilder
-from polaris_refactored.src.infrastructure.observability import (
-    initialize_observability, shutdown_observability, get_logger, get_metrics_collector
-)
-from polaris_refactored.src.framework.events import TelemetryEvent
-from polaris_refactored.src.domain.models import SystemState, HealthStatus
+# Add POLARIS framework to path
+polaris_root = Path(__file__).parent.parent.parent.parent.parent.parent
+sys.path.append(str(polaris_root))
 
-# SWIM-specific imports
-from .swim_adaptation_strategies import (
+# POLARIS framework imports 
+from polaris_refactored.src.domain.models import SystemState, HealthStatus, MetricValue, ExecutionStatus
+
+src_root = Path(__file__).parent
+sys.path.append(str(src_root))
+# SWIM-specific 
+from swim_adaptation_strategies import (
     SwimAdaptationStrategyFactory, SwimAdaptationCoordinator, AdaptationContext, AdaptationTrigger
 )
-from .swim_metrics_processor import SwimMetricsProcessor, SwimMetricsAggregator
+from swim_metrics_processor import SwimMetricsProcessor, SwimMetricsAggregator
 
 
 @dataclass
 class SystemStatus:
     """Current status of the SWIM POLARIS system."""
-    framework_running: bool
-    swim_connected: bool
-    adaptation_active: bool
-    last_adaptation: Optional[datetime]
-    total_adaptations: int
-    successful_adaptations: int
-    failed_adaptations: int
-    current_health: HealthStatus
-    uptime: float
+    framework_running: bool = False
+    swim_connected: bool = False
+    adaptation_active: bool = False
+    last_adaptation: Optional[datetime] = None
+    total_adaptations: int = 0
+    successful_adaptations: int = 0
+    failed_adaptations: int = 0
+    health_status: HealthStatus = HealthStatus.UNKNOWN
+    uptime: float = 0.0
+    last_update: Optional[datetime] = None
+    system_metrics: Optional[Dict[str, Any]] = None
+    component_status: Optional[Dict[str, HealthStatus]] = None
+    recent_adaptations: Optional[List[Dict[str, Any]]] = None
+
+
+class ConfigManager:
+    """Handles configuration loading and merging."""
+    
+    @staticmethod
+    def load_config(config_path: Path) -> Dict[str, Any]:
+        """Load configuration with inheritance support."""
+        if not config_path.exists():
+            raise FileNotFoundError(f"Configuration file not found: {config_path}")
+        
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+        
+        # Handle configuration inheritance
+        if "extends" in config:
+            base_config_path = config_path.parent / config["extends"]
+            if base_config_path.exists():
+                with open(base_config_path, 'r') as f:
+                    base_config = yaml.safe_load(f)
+                config = ConfigManager._merge_configs(base_config, config)
+        
+        return config
+    
+    @staticmethod
+    def _merge_configs(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+        """Deep merge configuration dictionaries."""
+        result = base.copy()
+        
+        for key, value in override.items():
+            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+                result[key] = ConfigManager._merge_configs(result[key], value)
+            else:
+                result[key] = value
+        
+        return result
+
+
+class SwimConnectorManager:
+    """Manages SWIM connector instantiation."""
+    
+    @staticmethod
+    def get_connector(swim_config: Dict[str, Any], logger: logging.Logger):
+        """Get SWIM connector with proper import handling."""
+        connector_path = Path(__file__).parent.parent.parent / "connector.py"
+        
+        if not connector_path.exists():
+            raise ImportError("SWIM connector not found")
+        
+        spec = importlib.util.spec_from_file_location("swim_connector", connector_path)
+        connector_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(connector_module)
+        
+        return connector_module.SwimTCPConnector(swim_config)
+
+
+class ComponentManager:
+    """Manages initialization of SWIM-specific components."""
+    
+    def __init__(self, config: Dict[str, Any], logger: logging.Logger):
+        self.config = config
+        self.logger = logger
+        self.metrics_processor: Optional[SwimMetricsProcessor] = None
+        self.metrics_aggregator: Optional[SwimMetricsAggregator] = None
+        self.adaptation_strategies: List = []
+        self.adaptation_coordinator: Optional[SwimAdaptationCoordinator] = None
+    
+    async def initialize(self):
+        """Initialize all SWIM components."""
+        self.logger.info("Initializing SWIM components...")
+        
+        # Initialize metrics components
+        metrics_config = self.config.get("metrics_processing", {})
+        self.metrics_processor = SwimMetricsProcessor(metrics_config)
+        
+        aggregator_config = self.config.get("metrics_aggregation", {})
+        self.metrics_aggregator = SwimMetricsAggregator(aggregator_config)
+        
+        # Initialize adaptation components
+        self.adaptation_strategies = SwimAdaptationStrategyFactory.create_strategies_from_config(
+            self.config
+        )
+        
+        coordinator_config = self.config.get("control_reasoning", {}).get("adaptive_controller", {})
+        self.adaptation_coordinator = SwimAdaptationCoordinator(
+            self.adaptation_strategies, coordinator_config
+        )
+        
+        self.logger.info(f"Initialized {len(self.adaptation_strategies)} adaptation strategies")
+
+
+class TelemetryProcessor:
+    """Handles telemetry collection and processing."""
+    
+    def __init__(self, component_manager: ComponentManager, config: Dict[str, Any], logger: logging.Logger):
+        self.component_manager = component_manager
+        self.config = config
+        self.logger = logger
+    
+    async def collect_and_process(self, system_status: SystemStatus):
+        """Collect and process telemetry from SWIM."""
+        swim_config = self.config.get("managed_systems", [{}])[0].get("config", {})
+        swim_connector = SwimConnectorManager.get_connector(swim_config, self.logger)
+        
+        # Collect system state
+        system_state = await swim_connector.get_system_state()
+        
+        # Process metrics
+        processed_metrics = await self.component_manager.metrics_processor.process_telemetry_event(system_state)
+        self.component_manager.metrics_aggregator.add_metrics(processed_metrics.swim_metrics)
+        
+        # Update system status
+        system_status.health_status = processed_metrics.health_status
+        system_status.last_update = datetime.now(timezone.utc)
+        system_status.system_metrics = system_state.metrics
+
+
+class AdaptationEngine:
+    """Handles adaptation decision and execution."""
+    
+    def __init__(self, component_manager: ComponentManager, config: Dict[str, Any], logger: logging.Logger):
+        self.component_manager = component_manager
+        self.config = config
+        self.logger = logger
+    
+    async def execute_cycle(self, system_status: SystemStatus):
+        """Execute one complete adaptation cycle (MAPE-K)."""
+        # Get recent metrics for context
+        recent_metrics = self.component_manager.metrics_processor.get_recent_metrics(10)
+        if not recent_metrics:
+            return
+        
+        current_metrics = recent_metrics[-1]
+        context = AdaptationContext(
+            current_metrics=current_metrics,
+            historical_metrics=recent_metrics[:-1],
+            system_state=None,
+            trigger=AdaptationTrigger.THRESHOLD_VIOLATION,
+            confidence=0.8,
+            constraints=self.config.get("adaptation", {}).get("constraints", {})
+        )
+        
+        # Check if adaptation is needed
+        should_adapt, confidence, strategies = await self.component_manager.adaptation_coordinator.should_adapt(context)
+        
+        if should_adapt:
+            self.logger.info(f"Adaptation needed (confidence: {confidence:.2f}, strategies: {strategies})")
+            
+            # Plan and execute adaptations
+            actions = await self.component_manager.adaptation_coordinator.plan_adaptations(context)
+            if actions:
+                await self._execute_adaptations(actions, system_status)
+    
+    async def _execute_adaptations(self, actions, system_status: SystemStatus):
+        """Execute adaptation actions."""
+        self.logger.info(f"Executing {len(actions)} adaptation actions")
+        
+        swim_config = self.config.get("managed_systems", [{}])[0].get("config", {})
+        swim_connector = SwimConnectorManager.get_connector(swim_config, self.logger)
+        
+        successful = 0
+        failed = 0
+        
+        for action in actions:
+            try:
+                result = await swim_connector.execute_action(action)
+                if result.status.value == "success":
+                    successful += 1
+                    self.logger.info(f"Action {action.action_type} executed successfully")
+                else:
+                    failed += 1
+                    self.logger.warning(f"Action {action.action_type} failed: {result.result_data}")
+            except Exception as e:
+                failed += 1
+                self.logger.error(f"Action {action.action_type} execution error: {e}")
+        
+        # Update statistics
+        system_status.successful_adaptations += successful
+        system_status.failed_adaptations += failed
+        system_status.total_adaptations += len(actions)
+        system_status.last_adaptation = datetime.now(timezone.utc)
+        
+        self.logger.info(f"Adaptation execution completed: {successful} successful, {failed} failed")
 
 
 class SwimPolarisDriver:
@@ -51,34 +239,20 @@ class SwimPolarisDriver:
     def __init__(self, config_path: str):
         self.config_path = Path(config_path)
         self.config: Optional[Dict[str, Any]] = None
-        self.framework: Optional[PolarisFramework] = None
+        self.logger: Optional[logging.Logger] = None
         
         # System components
-        self.metrics_processor: Optional[SwimMetricsProcessor] = None
-        self.metrics_aggregator: Optional[SwimMetricsAggregator] = None
-        self.adaptation_strategies: List = []
-        self.adaptation_coordinator: Optional[SwimAdaptationCoordinator] = None
+        self.component_manager: Optional[ComponentManager] = None
+        self.telemetry_processor: Optional[TelemetryProcessor] = None
+        self.adaptation_engine: Optional[AdaptationEngine] = None
         
         # System state
         self.running = False
         self.start_time: Optional[datetime] = None
-        self.system_status = SystemStatus(
-            framework_running=False,
-            swim_connected=False,
-            adaptation_active=False,
-            last_adaptation=None,
-            total_adaptations=0,
-            successful_adaptations=0,
-            failed_adaptations=0,
-            current_health=HealthStatus.UNKNOWN,
-            uptime=0.0
-        )
-        
-        # Logging
-        self.logger: Optional[logging.Logger] = None
-        
-        # Shutdown handling
+        self.system_status = SystemStatus()
         self.shutdown_event = asyncio.Event()
+        
+        # Setup signal handlers
         self._setup_signal_handlers()
     
     def _setup_signal_handlers(self):
@@ -96,23 +270,28 @@ class SwimPolarisDriver:
     
     async def initialize(self) -> bool:
         """Initialize the SWIM POLARIS system."""
+        print("Initializing SWIM POLARIS Adaptation System...")
+        
         try:
-            print("Initializing SWIM POLARIS Adaptation System...")
-            
             # Load configuration
-            await self._load_configuration()
+            self.config = ConfigManager.load_config(self.config_path)
+            print("Configuration loaded successfully")
             
-            # Initialize observability
-            await self._initialize_observability()
+            # Initialize logging
+            self._setup_logging()
             
-            # Initialize POLARIS framework
-            await self._initialize_framework()
+            # Initialize components
+            self.component_manager = ComponentManager(self.config, self.logger)
+            await self.component_manager.initialize()
             
-            # Initialize SWIM-specific components
-            await self._initialize_swim_components()
+            self.telemetry_processor = TelemetryProcessor(self.component_manager, self.config, self.logger)
+            self.adaptation_engine = AdaptationEngine(self.component_manager, self.config, self.logger)
             
             # Verify SWIM connection
             await self._verify_swim_connection()
+            
+            # Update system status
+            self.system_status.framework_running = True
             
             self.logger.info("SWIM POLARIS system initialized successfully")
             return True
@@ -123,136 +302,32 @@ class SwimPolarisDriver:
                 self.logger.error(f"System initialization failed: {e}")
             return False
     
-    async def _load_configuration(self):
-        """Load system configuration."""
-        print(f"Loading configuration from {self.config_path}")
-        
-        if not self.config_path.exists():
-            raise FileNotFoundError(f"Configuration file not found: {self.config_path}")
-        
-        with open(self.config_path, 'r') as f:
-            self.config = yaml.safe_load(f)
-        
-        # Load additional configuration files if specified
-        if "extends" in self.config:
-            base_config_path = self.config_path.parent / self.config["extends"]
-            if base_config_path.exists():
-                with open(base_config_path, 'r') as f:
-                    base_config = yaml.safe_load(f)
-                # Merge configurations (current config overrides base)
-                self.config = self._merge_configs(base_config, self.config)
-        
-        print("Configuration loaded successfully")
-    
-    def _merge_configs(self, base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
-        """Merge two configuration dictionaries."""
-        result = base.copy()
-        
-        for key, value in override.items():
-            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-                result[key] = self._merge_configs(result[key], value)
-            else:
-                result[key] = value
-        
-        return result
-    
-    async def _initialize_observability(self):
-        """Initialize observability system."""
-        print("Initializing observability...")
-        
-        observability_config = self.config.get("observability", {})
-        
-        # Create observability configuration
-        from polaris_refactored.src.infrastructure.observability.config_examples import create_observability_config
-        obs_config = create_observability_config(
-            service_name=observability_config.get("service_name", "swim-polaris-adaptation"),
-            environment="development"  # TODO: Make configurable
+    def _setup_logging(self):
+        """Initialize logging system."""
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
-        
-        # Initialize observability
-        observability_manager = initialize_observability(obs_config)
-        await observability_manager.initialize()
-        
-        # Get logger
-        self.logger = get_logger("swim_driver")
-        self.logger.info("Observability system initialized")
-    
-    async def _initialize_framework(self):
-        """Initialize POLARIS framework."""
-        self.logger.info("Initializing POLARIS framework...")
-        
-        # Create configuration builder
-        config_builder = ConfigurationBuilder()
-        
-        # Add configuration sources
-        config_builder.add_dict_source(self.config)
-        config_builder.add_environment_source("POLARIS_")
-        
-        # Build configuration
-        polaris_config = config_builder.build()
-        await polaris_config.load()
-        
-        # Create and start framework
-        self.framework = PolarisFramework(polaris_config)
-        await self.framework.start()
-        
-        self.system_status.framework_running = True
-        self.logger.info("POLARIS framework initialized and started")
-    
-    async def _initialize_swim_components(self):
-        """Initialize SWIM-specific components."""
-        self.logger.info("Initializing SWIM-specific components...")
-        
-        # Initialize metrics processor
-        metrics_config = self.config.get("metrics_processing", {})
-        self.metrics_processor = SwimMetricsProcessor(metrics_config)
-        
-        # Initialize metrics aggregator
-        aggregator_config = self.config.get("metrics_aggregation", {})
-        self.metrics_aggregator = SwimMetricsAggregator(aggregator_config)
-        
-        # Initialize adaptation strategies
-        self.adaptation_strategies = SwimAdaptationStrategyFactory.create_strategies_from_config(
-            self.config
-        )
-        
-        # Initialize adaptation coordinator
-        coordinator_config = self.config.get("control_reasoning", {}).get("adaptive_controller", {})
-        self.adaptation_coordinator = SwimAdaptationCoordinator(
-            self.adaptation_strategies, coordinator_config
-        )
-        
-        self.logger.info(f"Initialized {len(self.adaptation_strategies)} adaptation strategies")
+        self.logger = logging.getLogger("swim_driver")
+        self.logger.info("Logging system initialized")
     
     async def _verify_swim_connection(self):
         """Verify connection to SWIM system."""
         self.logger.info("Verifying SWIM connection...")
         
-        try:
-            # Get SWIM connector from framework
-            # This is a simplified approach - in a full implementation,
-            # you would get the connector through the framework's plugin system
-            swim_config = self.config.get("managed_systems", [{}])[0].get("config", {})
-            
-            from polaris_refactored.plugins.swim.connector import SwimTCPConnector
-            swim_connector = SwimTCPConnector(swim_config)
-            
-            # Test connection
-            connected = await swim_connector.connect()
-            if connected:
-                self.system_status.swim_connected = True
-                self.logger.info("SWIM connection verified")
-            else:
-                raise ConnectionError("Failed to connect to SWIM")
-                
-        except Exception as e:
-            self.logger.error(f"SWIM connection verification failed: {e}")
-            raise
+        swim_config = self.config.get("managed_systems", [{}])[0].get("config", {})
+        swim_connector = SwimConnectorManager.get_connector(swim_config, self.logger)
+        
+        connected = await swim_connector.connect()
+        if connected:
+            self.system_status.swim_connected = True
+            self.logger.info("SWIM connection verified")
+        else:
+            raise ConnectionError("Failed to connect to SWIM")
     
     async def run(self) -> int:
         """Run the SWIM POLARIS system."""
         try:
-            # Initialize system
             if not await self.initialize():
                 return 1
             
@@ -264,9 +339,7 @@ class SwimPolarisDriver:
             print("SWIM POLARIS Adaptation System is running...")
             print("Press Ctrl+C to stop")
             
-            # Start main processing loop
             await self._main_loop()
-            
             return 0
             
         except KeyboardInterrupt:
@@ -282,225 +355,82 @@ class SwimPolarisDriver:
         """Main processing loop."""
         self.logger.info("Starting main processing loop")
         
-        # Create tasks for different processing components
+        # Get intervals from config
+        collection_interval = self.config.get("managed_systems", [{}])[0].get("config", {}).get("implementation", {}).get("collection_interval", 10.0)
+        adaptation_interval = self.config.get("control_reasoning", {}).get("adaptive_controller", {}).get("mape_k_interval", 30.0)
+        
         tasks = [
-            asyncio.create_task(self._telemetry_processing_loop()),
-            asyncio.create_task(self._adaptation_loop()),
-            asyncio.create_task(self._status_monitoring_loop()),
-            asyncio.create_task(self._wait_for_shutdown())
+            asyncio.create_task(self._telemetry_loop(collection_interval)),
+            asyncio.create_task(self._adaptation_loop(adaptation_interval)),
+            asyncio.create_task(self._status_loop()),
+            asyncio.create_task(self.shutdown_event.wait())
         ]
         
-        try:
-            # Wait for any task to complete (usually shutdown)
-            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-            
-            # Cancel remaining tasks
-            for task in pending:
-                task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
-            
-        except Exception as e:
-            self.logger.error(f"Main loop error: {e}")
-            raise
-    
-    async def _telemetry_processing_loop(self):
-        """Process telemetry data from SWIM."""
-        self.logger.info("Starting telemetry processing loop")
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         
-        # Get collection interval from config
-        collection_interval = (
-            self.config.get("managed_systems", [{}])[0]
-            .get("config", {})
-            .get("implementation", {})
-            .get("collection_interval", 10.0)
-        )
+        # Cancel remaining tasks
+        for task in pending:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+    
+    async def _telemetry_loop(self, interval: float):
+        """Telemetry processing loop."""
+        self.logger.info("Starting telemetry processing loop")
         
         while self.running:
             try:
-                # Collect telemetry from SWIM
-                await self._collect_and_process_telemetry()
-                
-                # Wait for next collection
-                await asyncio.sleep(collection_interval)
-                
+                await self.telemetry_processor.collect_and_process(self.system_status)
+                await asyncio.sleep(interval)
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 self.logger.error(f"Telemetry processing error: {e}")
-                await asyncio.sleep(5.0)  # Brief pause before retry
+                self.system_status.health_status = HealthStatus.UNHEALTHY
+                await asyncio.sleep(5.0)
     
-    async def _collect_and_process_telemetry(self):
-        """Collect and process telemetry from SWIM."""
-        try:
-            # Get SWIM connector (simplified - would normally come from framework)
-            swim_config = self.config.get("managed_systems", [{}])[0].get("config", {})
-            from polaris_refactored.plugins.swim.connector import SwimTCPConnector
-            swim_connector = SwimTCPConnector(swim_config)
-            
-            # Collect system state
-            system_state = await swim_connector.get_system_state()
-            
-            # Create telemetry event
-            telemetry_event = TelemetryEvent(system_state)
-            
-            # Process metrics
-            processed_metrics = await self.metrics_processor.process_telemetry_event(telemetry_event)
-            
-            # Add to aggregator
-            self.metrics_aggregator.add_metrics(processed_metrics.swim_metrics)
-            
-            # Update system status
-            self.system_status.current_health = processed_metrics.health_status
-            
-            self.logger.debug(f"Processed telemetry: {len(processed_metrics.raw_metrics)} raw metrics, "
-                            f"{len(processed_metrics.derived_metrics)} derived metrics")
-            
-        except Exception as e:
-            self.logger.error(f"Failed to collect telemetry: {e}")
-            self.system_status.current_health = HealthStatus.UNHEALTHY
-    
-    async def _adaptation_loop(self):
-        """Main adaptation decision and execution loop."""
+    async def _adaptation_loop(self, interval: float):
+        """Adaptation processing loop."""
         self.logger.info("Starting adaptation loop")
-        
-        # Get adaptation interval from config
-        adaptation_interval = (
-            self.config.get("control_reasoning", {})
-            .get("adaptive_controller", {})
-            .get("mape_k_interval", 30.0)
-        )
         
         while self.running:
             try:
-                await self._execute_adaptation_cycle()
-                await asyncio.sleep(adaptation_interval)
-                
+                await self.adaptation_engine.execute_cycle(self.system_status)
+                await asyncio.sleep(interval)
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 self.logger.error(f"Adaptation loop error: {e}")
-                await asyncio.sleep(10.0)  # Longer pause on error
+                await asyncio.sleep(10.0)
     
-    async def _execute_adaptation_cycle(self):
-        """Execute one complete adaptation cycle (MAPE-K)."""
-        try:
-            # Get recent metrics for context
-            recent_metrics = self.metrics_processor.get_recent_metrics(10)
-            if not recent_metrics:
-                return
-            
-            current_metrics = recent_metrics[-1]
-            
-            # Create adaptation context
-            context = AdaptationContext(
-                current_metrics=current_metrics,
-                historical_metrics=recent_metrics[:-1],
-                system_state=None,  # Would be populated from framework
-                trigger=AdaptationTrigger.THRESHOLD_VIOLATION,
-                confidence=0.8,
-                constraints=self.config.get("adaptation", {}).get("constraints", {})
-            )
-            
-            # Check if adaptation is needed
-            should_adapt, confidence, strategies = await self.adaptation_coordinator.should_adapt(context)
-            
-            if should_adapt:
-                self.logger.info(f"Adaptation needed (confidence: {confidence:.2f}, strategies: {strategies})")
-                
-                # Plan adaptations
-                actions = await self.adaptation_coordinator.plan_adaptations(context)
-                
-                if actions:
-                    # Execute adaptations
-                    await self._execute_adaptations(actions)
-                    
-                    # Update statistics
-                    self.system_status.total_adaptations += len(actions)
-                    self.system_status.last_adaptation = datetime.now(timezone.utc)
-            
-        except Exception as e:
-            self.logger.error(f"Adaptation cycle error: {e}")
-    
-    async def _execute_adaptations(self, actions):
-        """Execute adaptation actions."""
-        self.logger.info(f"Executing {len(actions)} adaptation actions")
-        
-        try:
-            # Get SWIM connector
-            swim_config = self.config.get("managed_systems", [{}])[0].get("config", {})
-            from polaris_refactored.plugins.swim.connector import SwimTCPConnector
-            swim_connector = SwimTCPConnector(swim_config)
-            
-            successful = 0
-            failed = 0
-            
-            for action in actions:
-                try:
-                    result = await swim_connector.execute_action(action)
-                    if result.status.value == "success":
-                        successful += 1
-                        self.logger.info(f"Action {action.action_type} executed successfully")
-                    else:
-                        failed += 1
-                        self.logger.warning(f"Action {action.action_type} failed: {result.result_data}")
-                
-                except Exception as e:
-                    failed += 1
-                    self.logger.error(f"Action {action.action_type} execution error: {e}")
-            
-            # Update statistics
-            self.system_status.successful_adaptations += successful
-            self.system_status.failed_adaptations += failed
-            
-            self.logger.info(f"Adaptation execution completed: {successful} successful, {failed} failed")
-            
-        except Exception as e:
-            self.logger.error(f"Failed to execute adaptations: {e}")
-    
-    async def _status_monitoring_loop(self):
-        """Monitor and report system status."""
+    async def _status_loop(self):
+        """Status monitoring loop."""
         while self.running:
             try:
-                await self._update_system_status()
-                await self._log_system_status()
-                await asyncio.sleep(60.0)  # Status update every minute
+                # Update uptime
+                if self.start_time:
+                    self.system_status.uptime = (datetime.now(timezone.utc) - self.start_time).total_seconds()
                 
+                # Log status
+                self.logger.info("System Status", extra={
+                    "framework_running": self.system_status.framework_running,
+                    "swim_connected": self.system_status.swim_connected,
+                    "adaptation_active": self.system_status.adaptation_active,
+                    "total_adaptations": self.system_status.total_adaptations,
+                    "successful_adaptations": self.system_status.successful_adaptations,
+                    "failed_adaptations": self.system_status.failed_adaptations,
+                    "current_health": self.system_status.health_status.value,
+                    "uptime_seconds": self.system_status.uptime
+                })
+                
+                await asyncio.sleep(60.0)
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 self.logger.error(f"Status monitoring error: {e}")
                 await asyncio.sleep(30.0)
-    
-    async def _update_system_status(self):
-        """Update system status information."""
-        if self.start_time:
-            self.system_status.uptime = (datetime.now(timezone.utc) - self.start_time).total_seconds()
-    
-    async def _log_system_status(self):
-        """Log current system status."""
-        status = self.system_status
-        
-        self.logger.info(
-            "System Status",
-            extra={
-                "framework_running": status.framework_running,
-                "swim_connected": status.swim_connected,
-                "adaptation_active": status.adaptation_active,
-                "total_adaptations": status.total_adaptations,
-                "successful_adaptations": status.successful_adaptations,
-                "failed_adaptations": status.failed_adaptations,
-                "current_health": status.current_health.value,
-                "uptime_seconds": status.uptime
-            }
-        )
-    
-    async def _wait_for_shutdown(self):
-        """Wait for shutdown signal."""
-        await self.shutdown_event.wait()
-        self.logger.info("Shutdown signal received")
     
     async def shutdown(self):
         """Gracefully shutdown the system."""
@@ -509,24 +439,50 @@ class SwimPolarisDriver:
         
         self.logger.info("Initiating system shutdown...")
         self.running = False
-        
-        try:
-            # Stop framework
-            if self.framework:
-                await self.framework.stop()
-                self.system_status.framework_running = False
-            
-            # Shutdown observability
-            await shutdown_observability()
-            
-            self.logger.info("System shutdown completed")
-            
-        except Exception as e:
-            print(f"Error during shutdown: {e}")
+        self.system_status.framework_running = False
+        self.logger.info("System shutdown completed")
     
     def get_system_status(self) -> SystemStatus:
         """Get current system status."""
         return self.system_status
+    
+    async def get_status(self) -> SystemStatus:
+        """Get current system status (async version)."""
+        if self.start_time:
+            self.system_status.uptime = (datetime.now(timezone.utc) - self.start_time).total_seconds()
+        return self.system_status
+    
+    async def start(self) -> None:
+        """Start the system (for compatibility with ablation manager)."""
+        await self.initialize()
+        self.running = True
+        self.start_time = datetime.now(timezone.utc)
+        self.system_status.adaptation_active = True
+        
+        # Start background tasks
+        collection_interval = self.config.get("managed_systems", [{}])[0].get("config", {}).get("implementation", {}).get("collection_interval", 10.0)
+        adaptation_interval = self.config.get("control_reasoning", {}).get("adaptive_controller", {}).get("mape_k_interval", 30.0)
+        
+        self._background_tasks = [
+            asyncio.create_task(self._telemetry_loop(collection_interval)),
+            asyncio.create_task(self._adaptation_loop(adaptation_interval)),
+            asyncio.create_task(self._status_loop())
+        ]
+    
+    async def stop(self) -> None:
+        """Stop the system (for compatibility with ablation manager)."""
+        self.running = False
+        
+        if hasattr(self, '_background_tasks'):
+            for task in self._background_tasks:
+                if not task.done():
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+        
+        await self.shutdown()
 
 
 async def main():
