@@ -1,38 +1,64 @@
 """
-Control & Reasoning Layer - MAPE-K loop implementation
+Control and Reasoning Module
 
-This layer contains the core decision-making components including the adaptive controller
-and reasoning engine that implement the MAPE-K (Monitor, Analyze, Plan, Execute, Knowledge) loop.
-Includes PID-based reactive control strategies for fast mathematical adaptation responses.
+Exports the main components for agentic LLM reasoning integration.
 """
 
-from .adaptive_controller import (
-    PolarisAdaptiveController, 
-    ControlStrategy,
-    ReactiveControlStrategy,
-    PredictiveControlStrategy,
-    LearningControlStrategy,
-    AdaptationNeed
+from .reasoning_engine import (
+    ReasoningStrategy,
+    ReasoningContext,
+    ReasoningResult,
+    StatisticalReasoningStrategy,
+    CausalReasoningStrategy,
+    PolarisReasoningEngine
 )
-from .reasoning_engine import PolarisReasoningEngine, ReasoningStrategy
-from .pid_controller import PIDController, PIDConfig, MetricHistoryManager
-from .pid_reactive_strategy import PIDReactiveStrategy, PIDReactiveConfig
-from .pid_strategy_factory import PIDStrategyFactory, create_pid_strategy_from_system_type
+
+from .agentic_tools import (
+    WorldModelTool,
+    KnowledgeBaseTool,
+    SystemStateTool,
+    ActionValidationTool,
+    create_agentic_tool_registry
+)
+
+from .agentic_llm_reasoning_strategy import AgenticLLMReasoningStrategy
+
+from .agentic_execution_engine import (
+    AgenticExecutionEngine,
+    ExecutionContext,
+    ReasoningTrace
+)
+
+from .fallback_reasoning_strategy import (
+    FallbackReasoningStrategy,
+    create_fallback_reasoning_strategy
+)
 
 __all__ = [
-    "PolarisAdaptiveController",
-    "ControlStrategy",
-    "ReactiveControlStrategy",
-    "PredictiveControlStrategy",
-    "LearningControlStrategy",
-    "AdaptationNeed",
-    "PolarisReasoningEngine",
+    # Base reasoning components
     "ReasoningStrategy",
-    "PIDController",
-    "PIDConfig",
-    "MetricHistoryManager",
-    "PIDReactiveStrategy",
-    "PIDReactiveConfig",
-    "PIDStrategyFactory",
-    "create_pid_strategy_from_system_type"
+    "ReasoningContext", 
+    "ReasoningResult",
+    "StatisticalReasoningStrategy",
+    "CausalReasoningStrategy",
+    "PolarisReasoningEngine",
+    
+    # Agentic tools
+    "WorldModelTool",
+    "KnowledgeBaseTool", 
+    "SystemStateTool",
+    "ActionValidationTool",
+    "create_agentic_tool_registry",
+    
+    # Agentic reasoning strategy
+    "AgenticLLMReasoningStrategy",
+    
+    # Execution engine
+    "AgenticExecutionEngine",
+    "ExecutionContext",
+    "ReasoningTrace",
+    
+    # Fallback strategy
+    "FallbackReasoningStrategy",
+    "create_fallback_reasoning_strategy"
 ]
