@@ -44,10 +44,12 @@ class TelemetryToKnowledgeBaseHandler(EventHandler):
                     await self._kb.store_telemetry(event)
                 
                 # Update metrics
-                self.metrics.increment_telemetry_events_received(
-                    event.system_state.system_id, 
-                    "telemetry_event"
-                )
+                counter = self.metrics.get_metric("polaris_telemetry_events_received_total")
+                if counter:
+                    counter.increment(labels={
+                        "system_id": event.system_state.system_id,
+                        "event_type": "telemetry_event"
+                    })
                 
                 self.logger.debug("Telemetry event processed successfully", extra={
                     "system_id": event.system_state.system_id

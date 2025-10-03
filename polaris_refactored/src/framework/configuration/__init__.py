@@ -1,68 +1,20 @@
 """
-Configuration Management System
+POLARIS Configuration System
 
-Type-safe configuration management with hierarchical configuration support,
-YAML and environment variable sources, and comprehensive validation.
+Provides configuration management with multiple sources and hot reload capabilities.
 """
 
-from .models import (
-    NATSConfiguration,
-    TelemetryConfiguration,
-    LoggingConfiguration,
-    FrameworkConfiguration,
-    ManagedSystemConfiguration
-)
-
-from .sources import (
-    ConfigurationSource,
-    YAMLConfigurationSource,
-    EnvironmentConfigurationSource
-)
-
-from .validation import (
-    ConfigurationValidator,
-    ConfigurationValidationError
-)
-
 from .core import PolarisConfiguration
-
 from .builder import ConfigurationBuilder
-
-from .utils import (
-    load_configuration_from_file,
-    load_default_configuration,
-    create_configuration_builder,
-    load_configuration_with_hot_reload,
-    load_hot_reload_configuration
-)
+from .sources import ConfigurationSource, YAMLConfigurationSource, EnvironmentConfigurationSource
+from .models import FrameworkConfiguration, ManagedSystemConfiguration
 
 __all__ = [
-    # Models
-    'NATSConfiguration',
-    'TelemetryConfiguration', 
-    'LoggingConfiguration',
-    'FrameworkConfiguration',
-    'ManagedSystemConfiguration',
-    
-    # Sources
+    'PolarisConfiguration',
+    'ConfigurationBuilder', 
     'ConfigurationSource',
     'YAMLConfigurationSource',
     'EnvironmentConfigurationSource',
-    
-    # Validation
-    'ConfigurationValidator',
-    'ConfigurationValidationError',
-    
-    # Core
-    'PolarisConfiguration',
-    
-    # Builder
-    'ConfigurationBuilder',
-    
-    # Utilities
-    'load_configuration_from_file',
-    'load_default_configuration',
-    'create_configuration_builder',
-    'load_configuration_with_hot_reload',
-    'load_hot_reload_configuration'
+    'FrameworkConfiguration',
+    'ManagedSystemConfiguration'
 ]

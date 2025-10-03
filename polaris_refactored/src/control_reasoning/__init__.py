@@ -34,6 +34,29 @@ from .fallback_reasoning_strategy import (
     create_fallback_reasoning_strategy
 )
 
+from .adaptive_controller import (
+    ControlStrategy,
+    ReactiveControlStrategy,
+    PredictiveControlStrategy,
+    LearningControlStrategy,
+    PolarisAdaptiveController,
+    AdaptationNeed
+)
+
+from .pid_reactive_strategy import (
+    PIDReactiveStrategy,
+    PIDReactiveConfig
+)
+
+from .threshold_reactive_strategy import (
+    ThresholdReactiveStrategy,
+    ThresholdReactiveConfig,
+    ThresholdRule,
+    ThresholdCondition,
+    ThresholdOperator,
+    LogicalOperator
+)
+
 __all__ = [
     # Base reasoning components
     "ReasoningStrategy",
@@ -60,5 +83,25 @@ __all__ = [
     
     # Fallback strategy
     "FallbackReasoningStrategy",
-    "create_fallback_reasoning_strategy"
+    "create_fallback_reasoning_strategy",
+    
+    # Control strategies
+    "ControlStrategy",
+    "ReactiveControlStrategy", 
+    "PredictiveControlStrategy",
+    "LearningControlStrategy",
+    "PolarisAdaptiveController",
+    "AdaptationNeed",
+    
+    # PID reactive strategy
+    "PIDReactiveStrategy",
+    "PIDReactiveConfig",
+    
+    # Threshold reactive strategy
+    "ThresholdReactiveStrategy",
+    "ThresholdReactiveConfig",
+    "ThresholdRule",
+    "ThresholdCondition", 
+    "ThresholdOperator",
+    "LogicalOperator"
 ]

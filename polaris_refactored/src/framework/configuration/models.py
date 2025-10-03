@@ -44,7 +44,7 @@ class TelemetryConfiguration(BaseModel):
 class LoggingConfiguration(BaseModel):
     """Logging system configuration with validation."""
     level: str = Field(default="INFO", pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
-    format: str = Field(default="json", pattern="^(json|text)$")
+    format: str = Field(default="text", pattern="^(json|text)$")  # Fixed: default should be "text"
     output: str = Field(default="console", pattern="^(console|file|both)$")
     file_path: Optional[str] = None
     max_file_size: int = Field(default=10485760, ge=1024)  # 10MB default, min 1KB

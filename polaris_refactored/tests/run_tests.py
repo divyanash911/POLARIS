@@ -15,7 +15,7 @@ from typing import List, Optional, Sequence
 import time
 import shutil
 
-from tests.utils.coverage_utils import CoverageAnalyzer, TestMetrics
+from .utils.coverage_utils import CoverageAnalyzer, TestMetrics
 
 
 class PolarisTestRunner:

@@ -288,13 +288,21 @@ _loggers: Dict[str, PolarisLogger] = {}
 def get_logger(name: str, level: LogLevel = LogLevel.INFO) -> PolarisLogger:
     """Get or create a logger instance"""
     if name not in _loggers:
-        _loggers[name] = PolarisLogger(name, level)
+        logger = PolarisLogger(name, level)
+        
+        # If there's a root logger configured, inherit its handlers
+        if "polaris" in _loggers and name != "polaris":
+            root_logger = _loggers["polaris"]
+            for handler in root_logger.handlers:
+                logger.add_handler(handler)
+        
+        _loggers[name] = logger
     return _loggers[name]
 
 
 def configure_default_logging(
     level: LogLevel = LogLevel.INFO,
-    use_json: bool = True,
+    use_json: bool = False,
     log_file: Optional[Union[str, Path]] = None
 ) -> None:
     """Configure default logging for POLARIS"""
@@ -302,8 +310,27 @@ def configure_default_logging(
     # Choose formatter
     formatter = JSONLogFormatter() if use_json else HumanReadableFormatter()
     
-    # Configure root logger
+    # Clear all existing loggers and reconfigure them
+    global _loggers
+    for logger_name, logger in _loggers.items():
+        # Clear existing handlers
+        logger.handlers.clear()
+        
+        # Set level
+        logger.set_level(level)
+        
+        # Add console handler
+        console_handler = ConsoleLogHandler(formatter)
+        logger.add_handler(console_handler)
+        
+        # Add file handler if specified
+        if log_file:
+            file_handler = FileLogHandler(formatter, log_file)
+            logger.add_handler(file_handler)
+    
+    # Configure root logger for future loggers
     root_logger = get_logger("polaris")
+    root_logger.handlers.clear()  # Clear existing handlers
     root_logger.set_level(level)
     
     # Add console handler

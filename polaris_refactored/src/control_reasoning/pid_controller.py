@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from typing import Dict, Any, Optional, List, Deque
 from datetime import datetime, timezone
 
-from ..infrastructure.observability import get_logger
+from ..infrastructure.observability import get_logger, get_metrics_collector, get_tracer
 from ..domain.models import MetricValue
 
 
@@ -74,6 +74,8 @@ class PIDController:
         self.config = config
         self.state = PIDState()
         self.logger = get_logger(f"polaris.pid_controller.{config.metric_name}")
+        self.metrics = get_metrics_collector()
+        self.tracer = get_tracer()
         
         # Validate configuration
         if config.kp < 0 or config.ki < 0 or config.kd < 0:
@@ -105,84 +107,133 @@ class PIDController:
         Returns:
             Control output bounded by min_output and max_output
         """
-        if current_time is None:
-            current_time = time.time()
+        with self.tracer.trace_operation(f"pid_calculation_{self.config.metric_name}") as span:
+            span.add_tag("metric_name", self.config.metric_name)
+            span.add_tag("current_value", current_value)
+            span.add_tag("setpoint", self.config.setpoint)
+            
+            if current_time is None:
+                current_time = time.time()
 
-        # Calculate error
-        # Use current_value - setpoint so that a positive output means the metric is
-        # above the desired setpoint (e.g., high CPU) which aligns with strategy
-        # expectations where positive PID output => need to reduce metric (scale_out)
-        error = current_value - self.config.setpoint
+            # Calculate error
+            # Use current_value - setpoint so that a positive output means the metric is
+            # above the desired setpoint (e.g., high CPU) which aligns with strategy
+            # expectations where positive PID output => need to reduce metric (scale_out)
+            error = current_value - self.config.setpoint
+            span.add_tag("error", error)
 
-        # Initialize on first call
-        if self.state.last_time is None:
-            self.state.last_time = current_time
+            # Update error metrics
+            error_gauge = self.metrics.get_metric("polaris_pid_current_error")
+            if error_gauge:
+                error_gauge.set(error, labels={
+                    "system_id": "unknown",  # Will be set by strategy
+                    "metric_name": self.config.metric_name
+                })
+
+            # Initialize on first call
+            if self.state.last_time is None:
+                self.state.last_time = current_time
+                self.state.last_error = error
+                self._update_history(error, current_time)
+                
+                # Return proportional term only for first calculation
+                # Note: using new error sign convention
+                output = self.config.kp * error
+                bounded_output = self._bound_output(output)
+                
+                span.add_tag("first_calculation", True)
+                span.add_tag("output", bounded_output)
+                
+                self._update_output_metrics(bounded_output)
+                return bounded_output
+            
+            # Calculate time delta
+            dt = current_time - self.state.last_time
+            span.add_tag("time_delta", dt)
+            
+            # Skip calculation if time delta is too small or negative
+            if dt <= 0:
+                self.logger.warning("Invalid time delta for PID calculation", extra={
+                    "dt": dt,
+                    "current_time": current_time,
+                    "last_time": self.state.last_time,
+                    "metric_name": self.config.metric_name
+                })
+                span.add_tag("invalid_time_delta", True)
+                return 0.0
+            
+            # Only calculate if enough time has passed (respects sample_time)
+            if dt < self.config.sample_time:
+                output = self._get_last_output()
+                span.add_tag("using_cached_output", True)
+                span.add_tag("output", output)
+                return output
+            
+            # Time the PID calculation
+            calculation_start = time.time()
+            
+            # Proportional term
+            proportional = self.config.kp * error
+            
+            # Integral term (with windup protection)
+            self.state.integral_sum += error * dt
+            integral = self.config.ki * self.state.integral_sum
+            
+            # Derivative term
+            derivative = 0.0
+            if dt > 0:
+                derivative = self.config.kd * (error - self.state.last_error) / dt
+            
+            # Calculate total output
+            output = proportional + integral + derivative
+            
+            # Apply output bounds and handle integral windup
+            bounded_output = self._bound_output(output)
+            
+            # Integral windup protection: reduce integral sum if output is saturated
+            windup_occurred = False
+            if output != bounded_output and self.config.ki > 0:
+                # Back-calculate what integral sum should be to stay within bounds
+                max_integral = (bounded_output - proportional - derivative) / self.config.ki
+                self.state.integral_sum = max_integral
+                windup_occurred = True
+            
+            calculation_duration = time.time() - calculation_start
+            
+            # Update state
             self.state.last_error = error
+            self.state.last_time = current_time
             self._update_history(error, current_time)
             
-            # Return proportional term only for first calculation
-            # Note: using new error sign convention
-            output = self.config.kp * error
-            return self._bound_output(output)
-        
-        # Calculate time delta
-        dt = current_time - self.state.last_time
-        
-        # Skip calculation if time delta is too small or negative
-        if dt <= 0:
-            self.logger.warning("Invalid time delta for PID calculation", extra={
+            # Enhanced logging with more context
+            self.logger.debug("PID calculation completed", extra={
+                "metric_name": self.config.metric_name,
+                "current_value": current_value,
+                "setpoint": self.config.setpoint,
+                "error": error,
+                "proportional": proportional,
+                "integral": integral,
+                "derivative": derivative,
+                "output": output,
+                "bounded_output": bounded_output,
                 "dt": dt,
-                "current_time": current_time,
-                "last_time": self.state.last_time
+                "windup_occurred": windup_occurred,
+                "calculation_duration_ms": calculation_duration * 1000
             })
-            return 0.0
-        
-        # Only calculate if enough time has passed (respects sample_time)
-        if dt < self.config.sample_time:
-            return self._get_last_output()
-        
-        # Proportional term
-        proportional = self.config.kp * error
-        
-        # Integral term (with windup protection)
-        self.state.integral_sum += error * dt
-        integral = self.config.ki * self.state.integral_sum
-        
-        # Derivative term
-        derivative = 0.0
-        if dt > 0:
-            derivative = self.config.kd * (error - self.state.last_error) / dt
-        
-        # Calculate total output
-        output = proportional + integral + derivative
-        
-        # Apply output bounds and handle integral windup
-        bounded_output = self._bound_output(output)
-        
-        # Integral windup protection: reduce integral sum if output is saturated
-        if output != bounded_output and self.config.ki > 0:
-            # Back-calculate what integral sum should be to stay within bounds
-            max_integral = (bounded_output - proportional - derivative) / self.config.ki
-            self.state.integral_sum = max_integral
-        
-        # Update state
-        self.state.last_error = error
-        self.state.last_time = current_time
-        self._update_history(error, current_time)
-        
-        self.logger.debug("PID calculation completed", extra={
-            "metric_name": self.config.metric_name,
-            "current_value": current_value,
-            "error": error,
-            "proportional": proportional,
-            "integral": integral,
-            "derivative": derivative,
-            "output": output,
-            "bounded_output": bounded_output,
-            "dt": dt
-        })
-        
-        return bounded_output
+            
+            # Update span with calculation details
+            span.add_tag("proportional", proportional)
+            span.add_tag("integral", integral)
+            span.add_tag("derivative", derivative)
+            span.add_tag("output", output)
+            span.add_tag("bounded_output", bounded_output)
+            span.add_tag("windup_occurred", windup_occurred)
+            
+            # Update metrics
+            self._update_calculation_metrics(calculation_duration)
+            self._update_output_metrics(bounded_output)
+            
+            return bounded_output
     
     def _bound_output(self, output: float) -> float:
         """Apply output bounds to prevent system instability."""
@@ -269,6 +320,43 @@ class PIDController:
                 "metric_name": self.config.metric_name,
                 "changes": changes
             })
+    
+    def _update_calculation_metrics(self, duration: float) -> None:
+        """Update PID calculation performance metrics."""
+        try:
+            duration_histogram = self.metrics.get_metric("polaris_pid_calculation_duration_seconds")
+            if duration_histogram:
+                duration_histogram.observe(duration, labels={
+                    "system_id": "unknown",  # Will be set by strategy
+                    "metric_name": self.config.metric_name
+                })
+        except Exception as e:
+            self.logger.debug(f"Failed to update calculation metrics: {e}")
+    
+    def _update_output_metrics(self, output: float) -> None:
+        """Update PID output value metrics."""
+        try:
+            output_histogram = self.metrics.get_metric("polaris_pid_output_value")
+            if output_histogram:
+                output_histogram.observe(abs(output), labels={
+                    "system_id": "unknown",  # Will be set by strategy
+                    "metric_name": self.config.metric_name,
+                    "controller_type": "pid"
+                })
+        except Exception as e:
+            self.logger.debug(f"Failed to update output metrics: {e}")
+    
+    def update_health_status(self, system_id: str, is_healthy: bool) -> None:
+        """Update PID controller health status."""
+        try:
+            health_gauge = self.metrics.get_metric("polaris_pid_controller_health")
+            if health_gauge:
+                health_gauge.set(1.0 if is_healthy else 0.0, labels={
+                    "system_id": system_id,
+                    "metric_name": self.config.metric_name
+                })
+        except Exception as e:
+            self.logger.debug(f"Failed to update health metrics: {e}")
 
 
 class MetricHistoryManager:

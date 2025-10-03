@@ -1,7 +1,7 @@
 """
-Test script for fallback reasoning strategy integration.
+Integration test for fallback reasoning strategy.
 
-This script demonstrates and tests the fallback mechanisms between
+This test demonstrates and tests the fallback mechanisms between
 LLM-based agentic reasoning and traditional statistical/causal strategies.
 """
 
@@ -10,15 +10,19 @@ import logging
 from typing import Dict, Any
 from datetime import datetime, timezone
 
-from .fallback_reasoning_strategy import FallbackReasoningStrategy
-from .reasoning_engine import ReasoningContext
-from ..infrastructure.llm.client import MockLLMClient
-from ..infrastructure.llm.models import LLMConfiguration, LLMProvider
-from ..infrastructure.llm.exceptions import LLMAPIError, LLMTimeoutError
-from ..digital_twin.world_model import StatisticalWorldModel
-from ..digital_twin.knowledge_base import PolarisKnowledgeBase
-from ..infrastructure.data_storage import InMemoryDataStore
-from ..domain.models import MetricValue, SystemState, HealthStatus
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../../src'))
+
+from control_reasoning.fallback_reasoning_strategy import FallbackReasoningStrategy
+from control_reasoning.reasoning_engine import ReasoningContext
+from infrastructure.llm.client import MockLLMClient
+from infrastructure.llm.models import LLMConfiguration, LLMProvider
+from infrastructure.llm.exceptions import LLMAPIError, LLMTimeoutError
+from digital_twin.world_model import StatisticalWorldModel
+from digital_twin.knowledge_base import PolarisKnowledgeBase
+from infrastructure.data_storage import InMemoryDataStore
+from domain.models import MetricValue, SystemState, HealthStatus
 
 
 async def test_fallback_integration():

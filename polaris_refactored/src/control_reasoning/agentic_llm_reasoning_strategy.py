@@ -19,12 +19,16 @@ from ..infrastructure.llm.tool_registry import ToolRegistry
 from ..infrastructure.llm.conversation_manager import ConversationManager
 from ..infrastructure.llm.prompt_manager import PromptManager
 from ..infrastructure.llm.exceptions import LLMAPIError, LLMToolError
-from ..infrastructure.observability.factory import get_control_logger
+from ..infrastructure.observability import (
+    get_logger, get_metrics_collector, get_tracer, observe_polaris_component,
+    trace_adaptation_flow
+)
 from .agentic_tools import create_agentic_tool_registry
 from ..digital_twin.world_model import PolarisWorldModel
 from ..digital_twin.knowledge_base import PolarisKnowledgeBase
 
 
+@observe_polaris_component("agentic_llm_reasoning", auto_trace=True, auto_metrics=True)
 class AgenticLLMReasoningStrategy(ReasoningStrategy):
     """
     Agentic LLM reasoning strategy that uses dynamic tool invocation for intelligent analysis.
@@ -62,8 +66,13 @@ class AgenticLLMReasoningStrategy(ReasoningStrategy):
         self.conversation_manager = ConversationManager()
         self.prompt_manager = PromptManager()
         
-        # Setup logging
-        self.logger = get_control_logger("agentic_llm_reasoning")
+        # Setup logging and observability
+        self.logger = get_logger("polaris.agentic_llm_reasoning")
+        self.metrics = get_metrics_collector()
+        self.tracer = get_tracer()
+        
+        # Register LLM-specific metrics
+        self._register_llm_metrics()
         
         # Initialize prompts
         self._setup_prompts()
@@ -110,6 +119,55 @@ Use the available tools to gather information and build a comprehensive understa
         self.prompt_manager.add_template("system_prompt", system_prompt)
         self.prompt_manager.add_template("analysis_prompt", analysis_prompt)
     
+    def _register_llm_metrics(self) -> None:
+        """Register LLM reasoning specific metrics."""
+        try:
+            # LLM API call metrics
+            self.metrics.register_counter(
+                "polaris_llm_api_calls_total",
+                "Total LLM API calls made",
+                ["system_id", "model_name", "operation_type", "status"]
+            )
+            
+            # LLM API latency
+            self.metrics.register_histogram(
+                "polaris_llm_api_latency_seconds",
+                "LLM API call latency",
+                labels=["system_id", "model_name", "operation_type"]
+            )
+            
+            # LLM token usage
+            self.metrics.register_histogram(
+                "polaris_llm_tokens_used",
+                "Number of tokens used in LLM calls",
+                labels=["system_id", "model_name", "token_type"]
+            )
+            
+            # Tool usage metrics
+            self.metrics.register_counter(
+                "polaris_llm_tool_calls_total",
+                "Total LLM tool calls made",
+                ["system_id", "tool_name", "status"]
+            )
+            
+            # Reasoning iterations
+            self.metrics.register_histogram(
+                "polaris_llm_reasoning_iterations",
+                "Number of reasoning iterations per session",
+                labels=["system_id", "completion_status"]
+            )
+            
+            # Reasoning confidence
+            self.metrics.register_histogram(
+                "polaris_llm_reasoning_confidence",
+                "Confidence scores from LLM reasoning",
+                labels=["system_id", "reasoning_type"]
+            )
+            
+        except Exception as e:
+            self.logger.warning("Failed to register LLM metrics", extra={"error": str(e)})
+    
+    @trace_adaptation_flow("llm_agentic_reasoning")
     async def reason(self, context: ReasoningContext) -> ReasoningResult:
         """
         Perform agentic reasoning using LLM with dynamic tool invocation.
@@ -120,39 +178,73 @@ Use the available tools to gather information and build a comprehensive understa
         Returns:
             ReasoningResult with insights and recommendations
         """
-        try:
-            # Create new conversation for this reasoning session
-            conversation = AgenticConversation(
-                max_iterations=self.max_iterations,
-                context={
-                    "system_id": context.system_id,
-                    "reasoning_start": datetime.now(timezone.utc).isoformat()
-                }
-            )
+        reasoning_start_time = datetime.now(timezone.utc)
+        system_id = context.system_id
+        
+        with self._tracer.trace_operation("llm_reasoning_session") as span:
+            span.add_tag("system_id", system_id)
+            span.add_tag("max_iterations", self.max_iterations)
             
-            # Build initial context and start reasoning
-            initial_message = self._build_initial_message(context)
-            conversation.add_message(initial_message)
-            
-            # Perform iterative reasoning with tool usage
-            final_result = await self._perform_iterative_reasoning(conversation)
-            
-            # Extract insights and recommendations from the final result
-            return self._extract_reasoning_result(final_result, conversation)
-            
-        except Exception as e:
-            self.logger.error(f"Agentic reasoning failed: {str(e)}")
-            
-            # Return basic fallback result
-            return ReasoningResult(
-                insights=[{
-                    "type": "agentic_reasoning_error",
-                    "message": f"LLM reasoning failed: {str(e)}",
-                    "fallback": True
-                }],
-                confidence=0.1,
-                recommendations=[]
-            )
+            try:
+                # Create new conversation for this reasoning session
+                conversation = AgenticConversation(
+                    max_iterations=self.max_iterations,
+                    context={
+                        "system_id": system_id,
+                        "reasoning_start": reasoning_start_time.isoformat()
+                    }
+                )
+                
+                # Build initial context and start reasoning
+                initial_message = self._build_initial_message(context)
+                conversation.add_message(initial_message)
+                
+                # Perform iterative reasoning with tool usage
+                with self._metrics.time_telemetry_processing(system_id):
+                    final_result = await self._perform_iterative_reasoning(conversation)
+                
+                # Extract insights and recommendations from the final result
+                result = self._extract_reasoning_result(final_result, conversation)
+                
+                # Update success metrics
+                self._update_reasoning_metrics(system_id, conversation, result, success=True)
+                
+                span.add_tag("iterations_completed", conversation.current_iteration)
+                span.add_tag("tools_used", len(conversation.tool_calls))
+                span.add_tag("confidence", result.confidence)
+                
+                self._logger.info("LLM reasoning completed successfully", extra={
+                    "system_id": system_id,
+                    "iterations": conversation.current_iteration,
+                    "tools_used": len(conversation.tool_calls),
+                    "confidence": result.confidence,
+                    "duration_seconds": (datetime.now(timezone.utc) - reasoning_start_time).total_seconds()
+                })
+                
+                return result
+                
+            except Exception as e:
+                self._logger.error("Agentic reasoning failed", extra={
+                    "system_id": system_id,
+                    "error": str(e),
+                    "duration_seconds": (datetime.now(timezone.utc) - reasoning_start_time).total_seconds()
+                }, exc_info=e)
+                
+                # Update failure metrics
+                self._update_reasoning_metrics(system_id, None, None, success=False, error=str(e))
+                
+                span.set_error(e)
+                
+                # Return basic fallback result
+                return ReasoningResult(
+                    insights=[{
+                        "type": "agentic_reasoning_error",
+                        "message": f"LLM reasoning failed: {str(e)}",
+                        "fallback": True
+                    }],
+                    confidence=0.1,
+                    recommendations=[]
+                )
     
     def _build_initial_message(self, context: ReasoningContext) -> Message:
         """Build the initial message for the reasoning conversation."""
@@ -448,3 +540,54 @@ Use the available tools to gather information and build a comprehensive understa
             confidence=confidence,
             recommendations=recommendations
         )
+    
+    def _update_reasoning_metrics(
+        self, 
+        system_id: str, 
+        conversation: Optional[AgenticConversation], 
+        result: Optional[ReasoningResult], 
+        success: bool, 
+        error: Optional[str] = None
+    ) -> None:
+        """Update reasoning performance metrics."""
+        try:
+            # API call metrics
+            api_calls_counter = self._metrics.get_metric("polaris_llm_api_calls_total")
+            if api_calls_counter:
+                api_calls_counter.increment(labels={
+                    "system_id": system_id,
+                    "model_name": self.llm_client.config.model_name,
+                    "operation_type": "reasoning",
+                    "status": "success" if success else "error"
+                })
+            
+            if conversation:
+                # Reasoning iterations
+                iterations_histogram = self._metrics.get_metric("polaris_llm_reasoning_iterations")
+                if iterations_histogram:
+                    iterations_histogram.observe(conversation.current_iteration, labels={
+                        "system_id": system_id,
+                        "completion_status": "completed" if conversation.is_complete else "timeout"
+                    })
+                
+                # Tool usage metrics
+                tool_calls_counter = self._metrics.get_metric("polaris_llm_tool_calls_total")
+                if tool_calls_counter:
+                    for tool_call in conversation.tool_calls:
+                        tool_calls_counter.increment(labels={
+                            "system_id": system_id,
+                            "tool_name": tool_call.tool_name,
+                            "status": "success" if not tool_call.error_message else "error"
+                        })
+            
+            if result:
+                # Confidence metrics
+                confidence_histogram = self._metrics.get_metric("polaris_llm_reasoning_confidence")
+                if confidence_histogram:
+                    confidence_histogram.observe(result.confidence, labels={
+                        "system_id": system_id,
+                        "reasoning_type": "agentic"
+                    })
+                    
+        except Exception as e:
+            self._logger.debug(f"Failed to update reasoning metrics: {e}")

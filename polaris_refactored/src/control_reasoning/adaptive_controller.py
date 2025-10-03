@@ -1,66 +1,38 @@
 """
 Adaptive Controller Implementation
 
-Implements the Adaptive Controller with a MAPE-K (Monitor-Analyze-Plan-Execute with Knowledge) loop
-and pluggable control strategies with comprehensive observability. This component is responsible for:
-- Monitoring system telemetry
-- Analyzing the need for adaptation
-- Planning appropriate adaptation actions
-- Executing the adaptation process
-- Maintaining knowledge for future decisions
-- Full observability integration (logging, metrics, tracing)
-
-Key Components:
-- MAPE-K loop implementation with tracing
-- Pluggable control strategies (Reactive, Predictive, Learning)
-- Telemetry processing pipeline with metrics
-- Adaptation need assessment with logging
-- Strategy selection and execution with observability
+Provides the base classes and interfaces for adaptive control strategies.
+This is a simplified implementation for the SWIM system demo.
 """
 
-
-from abc import ABC, abstractmethod
+import logging
+import time
+import asyncio
 from typing import List, Dict, Any, Optional
+from dataclasses import dataclass
+from abc import ABC, abstractmethod
 
-from ..domain.models import AdaptationAction, SystemState, HealthStatus
-from ..framework.events import TelemetryEvent, AdaptationEvent
-from ..infrastructure.di import Injectable
-from ..infrastructure.observability import (
-    observe_polaris_component, trace_adaptation_flow, get_logger,
-    get_metrics_collector, get_tracer
-)
-from ..digital_twin.world_model import PolarisWorldModel
-from ..digital_twin.world_model import PredictionResult, SimulationResult
-from ..digital_twin.knowledge_base import PolarisKnowledgeBase
-from ..framework.events import PolarisEventBus
+from ..domain.models import AdaptationAction
+from ..framework.events import TelemetryEvent
+from ..infrastructure.observability import get_logger
 
 
+@dataclass
 class AdaptationNeed:
-    """Represents an identified need for adaptation."""
+    """Represents an identified need for system adaptation."""
+    system_id: str
+    is_needed: bool
+    reason: str
+    urgency: float = 0.5  # 0.0 to 1.0
+    context: Dict[str, Any] = None
     
-    def __init__(
-        self, 
-        system_id: str, 
-        is_needed: bool, 
-        reason: str, 
-        urgency: float = 0.5
-    ):
-        self.system_id = system_id
-        self.is_needed = is_needed
-        self.reason = reason
-        self.urgency = urgency  # 0.0 to 1.0
+    def __post_init__(self):
+        if self.context is None:
+            self.context = {}
 
 
 class ControlStrategy(ABC):
-    """Abstract base class for control strategies in the POLARIS adaptive control system.
-    
-    Control strategies implement different approaches to generating adaptation actions
-    based on the current system state and adaptation needs. Concrete strategies should
-    implement the generate_actions() method to provide specific adaptation logic.
-    
-    The strategy pattern allows for dynamic selection and composition of different
-    control approaches at runtime based on the system's current context.
-    """
+    """Base class for control strategies."""
     
     @abstractmethod
     async def generate_actions(
@@ -69,27 +41,15 @@ class ControlStrategy(ABC):
         current_state: Dict[str, Any],
         adaptation_need: AdaptationNeed
     ) -> List[AdaptationAction]:
-        """Generate adaptation actions for the given situation."""
+        """Generate adaptation actions based on current state and needs."""
         pass
 
 
 class ReactiveControlStrategy(ControlStrategy):
-    """Reactive control strategy that responds to current system conditions.
+    """Base class for reactive control strategies."""
     
-    This strategy implements simple rule-based adaptation by analyzing the current
-    system metrics and applying predefined rules to generate adaptation actions.
-    It does not consider historical data or predict future states.
-    
-    Key Features:
-    - Immediate response to threshold violations
-    - Simple, deterministic behavior
-    - Low computational overhead
-    - No dependency on historical data or complex models
-    
-    Example Rules:
-    - Scale out when CPU usage exceeds 85%
-    - Adjust QoS settings when latency is too high
-    """
+    def __init__(self):
+        self.logger = get_logger(self.__class__.__name__)
     
     async def generate_actions(
         self, 
@@ -97,461 +57,252 @@ class ReactiveControlStrategy(ControlStrategy):
         current_state: Dict[str, Any],
         adaptation_need: AdaptationNeed
     ) -> List[AdaptationAction]:
-        actions: List[AdaptationAction] = []
-        metrics = current_state.get("metrics", {})
-        # Simple heuristic rules
-        cpu = _get_numeric_metric(metrics, ["cpu", "cpu_usage", "cpu_percent"]) or 0.0
-        latency = _get_numeric_metric(metrics, ["latency", "p95_latency", "response_time"]) or 0.0
-
-        # Scale out if CPU high
-        if cpu >= 0.85:
-            actions.append(
-                AdaptationAction(
-                    action_id="",
-                    action_type="scale_out",
-                    target_system=system_id,
-                    parameters={"scale_factor": 2},
-                    priority=3,
-                )
-            )
-
-        # Increase resources or degrade non-critical features if latency high
-        if latency >= 0.85:
-            actions.append(
-                AdaptationAction(
-                    action_id="",
-                    action_type="tune_qos",
-                    target_system=system_id,
-                    parameters={"qos_level": "high"},
-                    priority=2,
-                )
-            )
-
+        """Generate reactive adaptation actions."""
+        # Simple fallback implementation
+        actions = []
+        
+        if not adaptation_need.is_needed:
+            return actions
+        
+        # Basic reactive logic based on urgency
+        if adaptation_need.urgency > 0.8:
+            # High urgency - scale up
+            actions.append(AdaptationAction(
+                action_id=f"reactive_{system_id}_{int(time.time())}",
+                action_type="ADD_SERVER",
+                target_system=system_id,
+                parameters={"reason": "high_urgency_reactive"},
+                priority=3
+            ))
+        elif adaptation_need.urgency < 0.3:
+            # Low urgency - might scale down
+            actions.append(AdaptationAction(
+                action_id=f"reactive_{system_id}_{int(time.time())}",
+                action_type="REMOVE_SERVER", 
+                target_system=system_id,
+                parameters={"reason": "low_urgency_reactive"},
+                priority=1
+            ))
+        
         return actions
 
 
 class PredictiveControlStrategy(ControlStrategy):
-    """Predictive control strategy that anticipates future system needs.
+    """Base class for predictive control strategies."""
     
-    This strategy uses the world model to simulate potential future states and
-    evaluates different adaptation actions before selecting the most promising ones.
-    It aims to prevent issues before they occur by taking proactive measures.
+    def __init__(self, world_model=None):
+        self.world_model = world_model
+        self.logger = get_logger(self.__class__.__name__)
     
-    Key Features:
-    - Proactive adaptation based on predictions
-    - Simulation of different adaptation scenarios
-    - Consideration of system dynamics and constraints
-    - Optimization of adaptation outcomes
-    
-    Dependencies:
-    - Requires a properly configured world model
-    - Benefits from historical data for accurate predictions
-    """
-    
-    def __init__(self, world_model: Optional[PolarisWorldModel] = None):
-        self._world_model = world_model
-
     async def generate_actions(
         self, 
         system_id: str, 
         current_state: Dict[str, Any],
         adaptation_need: AdaptationNeed
     ) -> List[AdaptationAction]:
-        if not self._world_model:
-            return []
-        # Ask the world model to simulate impact of common actions, pick best
-        candidates = [
-            {"action_type": "scale_out", "parameters": {"scale_factor": 2}},
-            {"action_type": "tune_qos", "parameters": {"qos_level": "high"}},
-        ]
-        best: Optional[Dict[str, Any]] = None
-        best_score = float("-inf")
-        for cand in candidates:
-            sim: SimulationResult = await self._world_model.simulate_adaptation_impact(system_id, cand)
-            score = _score_simulation_outcomes(sim.outcomes)
-            if score > best_score:
-                best_score = score
-                best = cand
-        if best:
-            return [
-                AdaptationAction(
-                    action_id="",
-                    action_type=best.get("action_type", "unknown"),
-                    target_system=system_id,
-                    parameters=best.get("parameters", {}),
-                    priority=3,
-                )
-            ]
+        """Generate predictive adaptation actions."""
+        # Placeholder implementation
         return []
 
 
 class LearningControlStrategy(ControlStrategy):
-    """Learning-based control strategy that leverages historical patterns and experiences.
+    """Base class for learning-based control strategies."""
     
-    This strategy uses the knowledge base to identify similar past situations and
-    retrieves the most effective adaptation actions that were taken in those cases.
-    It improves over time as more adaptation experiences are accumulated.
+    def __init__(self, knowledge_base=None):
+        self.knowledge_base = knowledge_base
+        self.logger = get_logger(self.__class__.__name__)
     
-    Key Features:
-    - Leverages historical adaptation experiences
-    - Improves with more data over time
-    - Can handle complex, non-linear relationships
-    - Adapts to changing system behavior
-    
-    Dependencies:
-    - Requires a populated knowledge base
-    - Benefits from a diverse set of historical patterns
-    - May require initial training period
-    """
-    
-    def __init__(self, knowledge_base: Optional[PolarisKnowledgeBase] = None):
-        self._kb = knowledge_base
-
     async def generate_actions(
         self, 
         system_id: str, 
         current_state: Dict[str, Any],
         adaptation_need: AdaptationNeed
     ) -> List[AdaptationAction]:
-        if not self._kb:
-            return []
-        # Use current conditions to search similar learned patterns
-        conditions = _conditions_from_state(current_state)
-        patterns = await self._kb.get_similar_patterns(conditions, similarity_threshold=0.6)
-        actions: List[AdaptationAction] = []
-        for p in patterns[:2]:  # take top 2
-            action_type = p.outcomes.get("action_type", "")
-            params = p.outcomes.get("parameters", {})
-            if action_type:
-                actions.append(
-                    AdaptationAction(
-                        action_id="",
-                        action_type=action_type,
-                        target_system=system_id,
-                        parameters=params,
-                        priority=2,
-                    )
-                )
-        return actions
+        """Generate learning-based adaptation actions."""
+        # Placeholder implementation
+        return []
 
 
-@observe_polaris_component("adaptive_controller", auto_trace=True, auto_metrics=True, log_method_calls=True)
 class PolarisAdaptiveController:
-    """POLARIS Adaptive Controller implementing the MAPE-K (Monitor-Analyze-Plan-Execute with Knowledge) loop.
-    
-    This controller orchestrates the adaptation process by:
-    1. Processing incoming telemetry (Monitor)
-    2. Assessing the need for adaptation (Analyze)
-    3. Selecting and executing appropriate control strategies (Plan)
-    4. Triggering adaptation actions (Execute)
-    5. Maintaining and utilizing system knowledge (Knowledge)
-    
-    The controller supports multiple control strategies that can be composed or selected
-    based on the current system state and adaptation needs:
-    - ReactiveControlStrategy: Responds to current system state
-    - PredictiveControlStrategy: Anticipates future needs using world model
-    - LearningControlStrategy: Leverages historical patterns and experiences
-    
-    Features:
-    - Pluggable strategy architecture
-    - Asynchronous processing
-    - Comprehensive telemetry handling
-    - Extensible design for custom strategies
-    - Full observability integration (logging, metrics, tracing)
+    """
+    Main adaptive controller that coordinates multiple control strategies.
     """
     
     def __init__(
         self,
         control_strategies: Optional[List[ControlStrategy]] = None,
-        world_model: Optional[PolarisWorldModel] = None,
-        knowledge_base: Optional[PolarisKnowledgeBase] = None,
-        event_bus: Optional[PolarisEventBus] = None,
+        world_model=None,
+        knowledge_base=None,
+        event_bus=None,
         enable_pid_strategy: bool = False,
         pid_config: Optional[Dict[str, Any]] = None,
+        enable_enhanced_assessment: bool = True,
     ):
-        # Observability integration
-        self.logger = get_logger("polaris.adaptive_controller")
-        self.metrics = get_metrics_collector()
-        self.tracer = get_tracer()
+        self.control_strategies = control_strategies or []
+        self.world_model = world_model
+        self.knowledge_base = knowledge_base
+        self.event_bus = event_bus
+        self.logger = get_logger(self.__class__.__name__)
         
-        # Dependencies
-        self._world_model: Optional[PolarisWorldModel] = world_model
-        self._kb: Optional[PolarisKnowledgeBase] = knowledge_base
-        self._event_bus: Optional[PolarisEventBus] = event_bus
-
-        # Strategies (wire dependencies where applicable)
-        default_strategies: List[ControlStrategy] = []
-        
-        # Add PID strategy if enabled
-        if enable_pid_strategy:
+        # Initialize enhanced assessment if enabled
+        self.enable_enhanced_assessment = enable_enhanced_assessment
+        if enable_enhanced_assessment:
             try:
-                from .pid_strategy_factory import PIDStrategyFactory, create_pid_strategy_from_system_type
-                
-                if pid_config:
-                    pid_strategy = PIDStrategyFactory.create_from_config(pid_config)
-                else:
-                    # Use default CPU/memory strategy
-                    pid_strategy = PIDStrategyFactory.create_default_cpu_memory_strategy()
-                
-                default_strategies.append(pid_strategy)
-                self.logger.info("PID strategy enabled and added")
-                
+                from .enhanced_adaptation_assessment import EnhancedAdaptationAssessment
+                self.enhanced_assessor = EnhancedAdaptationAssessment(
+                    world_model=world_model,
+                    knowledge_base=knowledge_base
+                )
+                self.logger.info("Enhanced adaptation assessment enabled")
             except Exception as e:
-                self.logger.error("Failed to initialize PID strategy", extra={
-                    "error": str(e)
-                }, exc_info=e)
-                # Fall back to basic reactive strategy
-                default_strategies.append(ReactiveControlStrategy())
+                self.logger.warning(f"Could not initialize enhanced assessment: {e}")
+                self.enhanced_assessor = None
+                self.enable_enhanced_assessment = False
         else:
-            # Use basic reactive strategy
-            default_strategies.append(ReactiveControlStrategy())
+            self.enhanced_assessor = None
         
-        # Add other strategies
-        default_strategies.extend([
-            PredictiveControlStrategy(world_model=world_model),
-            LearningControlStrategy(knowledge_base=knowledge_base),
-        ])
-        
-        self._control_strategies = control_strategies or default_strategies
-        
-        self.logger.info("Adaptive controller initialized", extra={
-            "strategies_count": len(self._control_strategies),
-            "world_model_available": self._world_model is not None,
-            "knowledge_base_available": self._kb is not None,
-            "event_bus_available": self._event_bus is not None
-        })
+        # Add default strategies if none provided
+        if not self.control_strategies:
+            self.control_strategies.append(ReactiveControlStrategy())
     
-    @trace_adaptation_flow("telemetry_processing")
     async def process_telemetry(self, telemetry: TelemetryEvent) -> None:
-        """Process incoming telemetry and trigger adaptations if needed."""
-        system_id = telemetry.system_state.system_id
-        
-        self.logger.debug("Processing telemetry", extra={
-            "system_id": system_id,
-            "health_status": telemetry.system_state.health_status.value,
-            "metrics_count": len(telemetry.system_state.metrics)
-        })
-        
-        # Monitor: update world model and optionally store in KB
-        if self._world_model:
-            try:
-                with self.tracer.trace_operation("world_model_update"):
-                    await self._world_model.update_system_state(telemetry)
-                self.logger.debug("World model updated", extra={"system_id": system_id})
-            except Exception as e:
-                self.logger.warning("Failed to update world model", extra={
-                    "system_id": system_id,
-                    "error": str(e)
-                }, exc_info=e)
-        
-        if self._kb:
-            try:
-                with self.tracer.trace_operation("knowledge_base_store"):
-                    await self._kb.store_telemetry(telemetry)
-                self.logger.debug("Telemetry stored in knowledge base", extra={"system_id": system_id})
-            except Exception as e:
-                self.logger.warning("Failed to store telemetry in knowledge base", extra={
-                    "system_id": system_id,
-                    "error": str(e)
-                }, exc_info=e)
-
-        # Analyze: assess need
-        with self.tracer.trace_operation("adaptation_need_assessment"):
+        """Process telemetry and trigger adaptation if needed."""
+        try:
+            system_id = telemetry.system_state.system_id
+            
+            # Assess adaptation need
             adaptation_need = await self.assess_adaptation_need(telemetry)
-        
-        if not adaptation_need.is_needed:
-            self.logger.debug("No adaptation needed", extra={
-                "system_id": system_id,
-                "reason": adaptation_need.reason
-            })
-            return
-        
-        self.logger.info("Adaptation needed", extra={
-            "system_id": system_id,
-            "reason": adaptation_need.reason,
-            "urgency": adaptation_need.urgency
-        })
-        
-        # Update metrics
-        self.metrics.increment_adaptations_triggered(
-            system_id, 
-            "telemetry_driven", 
-            adaptation_need.reason
-        )
-
-        # Plan & Execute trigger
-        await self.trigger_adaptation_process(adaptation_need, telemetry.system_state)
+            
+            if adaptation_need.is_needed:
+                await self.trigger_adaptation_process(adaptation_need, telemetry)
+                
+        except Exception as e:
+            self.logger.error(f"Error processing telemetry: {e}", exc_info=True)
     
     async def assess_adaptation_need(self, telemetry: TelemetryEvent) -> AdaptationNeed:
-        """Assess if adaptation is needed based on telemetry."""
-        state: SystemState = telemetry.system_state
-        # Simple health-based rule
-        if state.health_status in (HealthStatus.WARNING, HealthStatus.UNHEALTHY, HealthStatus.CRITICAL):
-            urgency = {HealthStatus.WARNING: 0.5, HealthStatus.UNHEALTHY: 0.8, HealthStatus.CRITICAL: 1.0}.get(
-                state.health_status, 0.6
-            )
-            return AdaptationNeed(system_id=state.system_id, is_needed=True, reason=str(state.health_status.value), urgency=urgency)
-
-        # Metric thresholds (normalized 0..1 preferred; if >1, treat >85 as high)
-        metrics = state.metrics or {}
-        cpu = _get_numeric_metric(metrics, ["cpu", "cpu_usage", "cpu_percent"]) or 0.0
-        latency = _get_numeric_metric(metrics, ["latency", "p95_latency", "response_time"]) or 0.0
-        cpu_high = cpu >= 0.9 or cpu >= 85.0
-        latency_high = latency >= 0.9 or latency >= 85.0
-        if cpu_high or latency_high:
-            reason = "High CPU" if cpu_high else "High Latency"
-            urgency = 0.8 if cpu_high and latency_high else 0.6
-            return AdaptationNeed(system_id=state.system_id, is_needed=True, reason=reason, urgency=urgency)
-
-        return AdaptationNeed(system_id=state.system_id, is_needed=False, reason="No issues detected")
+        """Assess whether adaptation is needed based on telemetry."""
+        
+        # Use enhanced assessment if available
+        if self.enable_enhanced_assessment and self.enhanced_assessor:
+            try:
+                enhanced_need = await self.enhanced_assessor.assess_adaptation_need(telemetry)
+                
+                # Log enhanced assessment details
+                if enhanced_need.is_needed:
+                    trend_info = [f"{t.metric_name}:{t.direction.value}" for t in enhanced_need.trends[:3]]
+                    self.logger.info(
+                        f"🔍 ENHANCED ASSESSMENT [{enhanced_need.system_id}]: "
+                        f"{enhanced_need.severity.value} - {enhanced_need.reason} "
+                        f"(trends: {', '.join(trend_info)})",
+                        extra={
+                            "assessment_type": "enhanced",
+                            "severity": enhanced_need.severity.value,
+                            "confidence": enhanced_need.confidence,
+                            "time_to_critical": enhanced_need.time_to_critical
+                        }
+                    )
+                
+                return enhanced_need
+                
+            except Exception as e:
+                self.logger.warning(f"Enhanced assessment failed, falling back to basic: {e}")
+        
+        # Fallback to basic assessment
+        system_state = telemetry.system_state
+        system_id = system_state.system_id
+        
+        # Simple assessment based on health status
+        is_needed = False
+        reason = "No adaptation needed"
+        urgency = 0.0
+        
+        if system_state.health_status.value in ["warning", "critical", "unhealthy"]:
+            is_needed = True
+            reason = f"System health is {system_state.health_status.value}"
+            urgency = 0.7 if system_state.health_status.value == "warning" else 0.9
+        
+        # Check metrics for additional indicators
+        metrics = system_state.metrics
+        if metrics:
+            # Check server utilization
+            if "server_utilization" in metrics:
+                util = metrics["server_utilization"].value
+                if util > 0.8:
+                    is_needed = True
+                    reason = f"High server utilization: {util:.2f}"
+                    urgency = max(urgency, 0.8)
+                elif util < 0.2:
+                    is_needed = True
+                    reason = f"Low server utilization: {util:.2f}"
+                    urgency = max(urgency, 0.3)
+            
+            # Check response time
+            if "basic_response_time" in metrics:
+                rt = metrics["basic_response_time"].value
+                if rt > 1000:  # milliseconds
+                    is_needed = True
+                    reason = f"High response time: {rt}ms"
+                    urgency = max(urgency, 0.7)
+        
+        return AdaptationNeed(
+            system_id=system_id,
+            is_needed=is_needed,
+            reason=reason,
+            urgency=urgency,
+            context={"telemetry": telemetry}
+        )
     
-    async def trigger_adaptation_process(self, adaptation_need: AdaptationNeed, current_state_obj: Optional[SystemState] = None) -> None:
-        """Trigger the adaptation process for an identified need.
-
-        current_state_obj: optionally provide the live SystemState that triggered analysis.
-        If not provided, the controller will fall back to knowledge base snapshot.
-        """
-        if not self._event_bus:
-            return
-        system_id = adaptation_need.system_id
-        # Build planning context
-        if current_state_obj is not None:
-            current_state = {
-                "metrics": current_state_obj.metrics,
-                "health_status": current_state_obj.health_status.value,
-                "timestamp": current_state_obj.timestamp,
+    async def trigger_adaptation_process(self, adaptation_need: AdaptationNeed, telemetry: TelemetryEvent = None) -> None:
+        """Trigger the adaptation process."""
+        try:
+            system_id = adaptation_need.system_id
+            
+            # Get current state
+            current_state = self._get_current_state_snapshot(system_id, telemetry)
+            
+            # Generate actions from all strategies
+            all_actions = []
+            for strategy in self.control_strategies:
+                try:
+                    actions = await strategy.generate_actions(system_id, current_state, adaptation_need)
+                    all_actions.extend(actions)
+                except Exception as e:
+                    self.logger.error(f"Error in strategy {strategy.__class__.__name__}: {e}")
+            
+            # Publish adaptation event if we have actions
+            if all_actions and self.event_bus:
+                from ..framework.events import AdaptationEvent
+                event = AdaptationEvent(
+                    system_id=system_id,
+                    reason=adaptation_need.reason,
+                    suggested_actions=all_actions,
+                    severity="high" if adaptation_need.urgency > 0.7 else "medium"
+                )
+                await self.event_bus.publish(event)
+                
+                self.logger.info(f"🔄 ADAPTATION TRIGGERED for {system_id}: {adaptation_need.reason} - {len(all_actions)} actions")
+            
+        except Exception as e:
+            self.logger.error(f"Error triggering adaptation: {e}", exc_info=True)
+    
+    def _get_current_state_snapshot(self, system_id: str, telemetry: TelemetryEvent = None) -> Dict[str, Any]:
+        """Get current state snapshot for a system."""
+        if telemetry:
+            # Use telemetry data as current state
+            return {
+                "metrics": telemetry.system_state.metrics,
+                "health_status": telemetry.system_state.health_status,
+                "timestamp": telemetry.system_state.timestamp,
+                "system_id": system_id
             }
-        else:
-            current_state = await self._get_current_state_snapshot(system_id)
-        strategy = await self.select_control_strategy(system_id, {"adaptation_need": adaptation_need.__dict__, "current_state": current_state})
-        actions: List[AdaptationAction] = []
-        if strategy:
-            try:
-                actions = await strategy.generate_actions(system_id, current_state, adaptation_need)
-            except Exception:
-                actions = []
-        # Persist planned actions to KB for adaptation history
-        if actions and self._kb:
-            try:
-                await self._kb.store_adaptation_actions(actions)
-            except Exception:
-                pass
-        severity = _severity_from_urgency(adaptation_need.urgency)
-        event = AdaptationEvent(system_id=system_id, reason=adaptation_need.reason, suggested_actions=actions, severity=severity)
-        await self._event_bus.publish_adaptation_needed(event)
+        # This would normally query the world model or data store
+        # For now, return empty dict
+        return {}
     
-    async def select_control_strategy(
-        self, 
-        system_id: str, 
-        context: Dict[str, Any]
-    ) -> ControlStrategy:
-        """Select the appropriate control strategy for the situation."""
-        # Simple selection logic:
-        # - If world model exists and can provide a meaningful prediction -> Predictive
-        # - Else if KB exists and has similar patterns -> Learning
-        # - Else -> Reactive
-        need: AdaptationNeed = context.get("adaptation_need") if isinstance(context.get("adaptation_need"), AdaptationNeed) else None  # type: ignore[assignment]
-        if self._world_model:
-            try:
-                pred: PredictionResult = await self._world_model.predict_system_behavior(system_id, time_horizon=60)
-                if pred and pred.probability >= 0.6:
-                    for s in self._control_strategies:
-                        if isinstance(s, PredictiveControlStrategy):
-                            return s
-            except Exception:
-                pass
-        if self._kb:
-            try:
-                current_state = context.get("current_state", {})
-                conditions = _conditions_from_state(current_state)
-                sims = await self._kb.get_similar_patterns(conditions, similarity_threshold=0.7)
-                if sims:
-                    for s in self._control_strategies:
-                        if isinstance(s, LearningControlStrategy):
-                            return s
-            except Exception:
-                pass
-        # Default reactive - prefer PID strategy if available
-        from .pid_reactive_strategy import PIDReactiveStrategy
-        
-        # First try to find PID strategy
-        for s in self._control_strategies:
-            if isinstance(s, PIDReactiveStrategy):
-                return s
-        
-        # Fall back to basic reactive strategy
-        for s in self._control_strategies:
-            if isinstance(s, ReactiveControlStrategy):
-                return s
-        
-        return self._control_strategies[0] if self._control_strategies else None
-
-    async def _get_current_state_snapshot(self, system_id: str) -> Dict[str, Any]:
-        """Fetch current state data for planning; prefer KB if available, else rely on latest world model memory-less context.
-
-        Returns a dict with at least a "metrics" map if known.
-        """
-        if self._kb:
-            try:
-                state = await self._kb.get_current_state(system_id)
-                if state:
-                    return {"metrics": state.metrics, "health_status": state.health_status.value, "timestamp": state.timestamp}
-            except Exception:
-                pass
-        # Fallback minimal context
-        return {"metrics": {}}
-
-
-# ---------- Helpers ----------
-
-def _get_numeric_metric(metrics: Dict[str, Any], names: List[str]) -> Optional[float]:
-    for n in names:
-        mv = metrics.get(n)
-        if mv is None:
-            continue
-        try:
-            # MetricValue or raw
-            if hasattr(mv, "value"):
-                return float(getattr(mv, "value"))
-            return float(mv)
-        except (TypeError, ValueError):
-            continue
-    return None
-
-
-def _conditions_from_state(state: Dict[str, Any]) -> Dict[str, Any]:
-    metrics = state.get("metrics", {}) if isinstance(state, dict) else {}
-    cond: Dict[str, Any] = {}
-    for k, v in metrics.items():
-        try:
-            val = float(getattr(v, "value", v))
-            cond[k] = "high" if val >= 0.85 or val >= 85.0 else ("low" if val <= 0.15 else "normal")
-        except Exception:
-            # categorize non-numeric as present
-            cond[k] = "present"
-    return cond
-
-
-def _score_simulation_outcomes(outcomes: Dict[str, Any]) -> float:
-    score = 0.0
-    for k, v in outcomes.items():
-        try:
-            val = float(v)
-        except (TypeError, ValueError):
-            continue
-        # Lower latency/cpu is better; invert common load metrics
-        if "latency" in k.lower() or "cpu" in k.lower():
-            score += (1.0 - min(1.0, max(0.0, val)))
-        else:
-            score += val
-    return score
-
-
-def _severity_from_urgency(urgency: float) -> str:
-    if urgency >= 0.9:
-        return "critical"
-    if urgency >= 0.75:
-        return "high"
-    if urgency >= 0.5:
-        return "normal"
-    return "low"
+    async def start(self) -> None:
+        """Start the adaptive controller."""
+        self.logger.info("Adaptive controller started")
+    
+    async def stop(self) -> None:
+        """Stop the adaptive controller."""
+        self.logger.info("Adaptive controller stopped")

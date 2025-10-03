@@ -6,7 +6,11 @@ prompt management, response parsing, tool registry, conversation management,
 and caching for the POLARIS adaptation framework.
 """
 
-from .client import LLMClient, OpenAIClient, AnthropicClient, MockLLMClient
+from .client import LLMClient, OpenAIClient, AnthropicClient, GoogleClient, MockLLMClient
+from .client_factory import (
+    LLMClientFactory, create_llm_client, create_openai_client, 
+    create_anthropic_client, create_google_client, create_mock_client
+)
 from .prompt_manager import PromptManager, PromptTemplate, ConversationFlow
 from .response_parser import ResponseParser, JSONSchemaValidator, FunctionCallParser
 from .tool_registry import ToolRegistry, BaseTool, ToolSchema, ToolResult
@@ -35,7 +39,16 @@ __all__ = [
     'LLMClient',
     'OpenAIClient', 
     'AnthropicClient',
+    'GoogleClient',
     'MockLLMClient',
+    
+    # Factory functions
+    'LLMClientFactory',
+    'create_llm_client',
+    'create_openai_client',
+    'create_anthropic_client',
+    'create_google_client',
+    'create_mock_client',
     
     # Prompt management
     'PromptManager',

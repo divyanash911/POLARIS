@@ -20,7 +20,10 @@ from dataclasses import dataclass, field
 from .adaptive_controller import ReactiveControlStrategy, AdaptationNeed
 from .pid_controller import PIDController, PIDConfig, MetricHistoryManager
 from ..domain.models import AdaptationAction, MetricValue
-from ..infrastructure.observability import get_logger, get_metrics_collector
+from ..infrastructure.observability import (
+    get_logger, get_metrics_collector, get_tracer, observe_polaris_component,
+    trace_adaptation_flow
+)
 
 
 @dataclass
@@ -39,6 +42,7 @@ class PIDReactiveConfig:
     })
 
 
+@observe_polaris_component("pid_reactive_strategy", auto_trace=True, auto_metrics=True)
 class PIDReactiveStrategy(ReactiveControlStrategy):
     """
     PID-based Reactive Control Strategy.
@@ -72,6 +76,9 @@ class PIDReactiveStrategy(ReactiveControlStrategy):
         self.last_action_time: Dict[str, float] = {}
         self.action_cooldown = 5.0  # seconds between actions for same metric
         
+        # Register PID-specific metrics
+        self._register_pid_metrics()
+        
         self.logger.info("PID Reactive Strategy initialized", extra={
             "controller_count": len(self.pid_controllers),
             "monitored_metrics": list(self.pid_controllers.keys()),
@@ -79,6 +86,7 @@ class PIDReactiveStrategy(ReactiveControlStrategy):
             "max_concurrent_actions": self.config.max_concurrent_actions
         })
     
+    @trace_adaptation_flow("pid_reactive_adaptation")
     async def generate_actions(
         self, 
         system_id: str, 
@@ -97,34 +105,52 @@ class PIDReactiveStrategy(ReactiveControlStrategy):
             List of adaptation actions based on PID controller outputs
         """
         try:
-            actions = await self._generate_pid_actions(system_id, current_state, adaptation_need)
+            # Enhanced metrics collection
+            with self._metrics.time_adaptation(system_id, "pid_reactive"):
+                actions = await self._generate_pid_actions(system_id, current_state, adaptation_need)
             
-            # Log PID action generation
-            self.logger.info("PID actions generated", extra={
+            # Log PID action generation with enhanced context
+            self._logger.info("PID actions generated", extra={
                 "system_id": system_id,
                 "action_count": len(actions),
                 "adaptation_reason": adaptation_need.reason,
-                "urgency": adaptation_need.urgency
+                "urgency": adaptation_need.urgency,
+                "controller_count": len(self.pid_controllers),
+                "active_controllers": list(self.pid_controllers.keys())
             })
             
-            # Update metrics
-            self.metrics.increment_counter("pid_strategy_actions_generated", {
-                "system_id": system_id,
-                "action_count": str(len(actions))
-            })
+            # Update comprehensive metrics
+            self._metrics.increment_adaptations_triggered(system_id, "pid_reactive", adaptation_need.reason)
+            if actions:
+                self._metrics.increment_adaptations_successful(system_id, "pid_reactive")
+            
+            # Component-specific metrics
+            pid_metrics = self._metrics.get_metric("polaris_pid_controller_actions_total")
+            if pid_metrics:
+                pid_metrics.increment(labels={
+                    "system_id": system_id,
+                    "action_count": str(len(actions)),
+                    "urgency_level": "high" if adaptation_need.urgency > 0.7 else "medium" if adaptation_need.urgency > 0.3 else "low"
+                })
             
             return actions
             
         except Exception as e:
-            self.logger.error("PID action generation failed", extra={
+            self._logger.error("PID action generation failed", extra={
                 "system_id": system_id,
-                "error": str(e)
+                "error": str(e),
+                "adaptation_reason": adaptation_need.reason,
+                "controller_count": len(self.pid_controllers)
             }, exc_info=e)
+            
+            # Update failure metrics
+            self._metrics.increment_adaptations_failed(system_id, "pid_reactive", str(e))
             
             # Fallback to parent reactive strategy if enabled
             if self.config.enable_fallback:
-                self.logger.info("Falling back to basic reactive strategy", extra={
-                    "system_id": system_id
+                self._logger.info("Falling back to basic reactive strategy", extra={
+                    "system_id": system_id,
+                    "fallback_reason": "pid_generation_failed"
                 })
                 return await super().generate_actions(system_id, current_state, adaptation_need)
             
@@ -439,3 +465,44 @@ class PIDReactiveStrategy(ReactiveControlStrategy):
         
         self.last_action_time.clear()
         self.logger.info("All PID controllers reset")
+    
+    def _register_pid_metrics(self) -> None:
+        """Register PID-specific metrics."""
+        try:
+            # PID controller actions
+            self.metrics.register_counter(
+                "polaris_pid_controller_actions_total",
+                "Total PID controller actions generated",
+                ["system_id", "action_count", "urgency_level"]
+            )
+            
+            # PID calculation metrics
+            self.metrics.register_histogram(
+                "polaris_pid_calculation_duration_seconds",
+                "Time taken for PID calculations",
+                labels=["system_id", "metric_name"]
+            )
+            
+            # PID output metrics
+            self.metrics.register_histogram(
+                "polaris_pid_output_value",
+                "PID controller output values",
+                labels=["system_id", "metric_name", "controller_type"]
+            )
+            
+            # PID error metrics
+            self.metrics.register_gauge(
+                "polaris_pid_current_error",
+                "Current error value for PID controllers",
+                ["system_id", "metric_name"]
+            )
+            
+            # PID controller health
+            self.metrics.register_gauge(
+                "polaris_pid_controller_health",
+                "Health status of PID controllers (1=healthy, 0=unhealthy)",
+                ["system_id", "metric_name"]
+            )
+            
+        except Exception as e:
+            self.logger.warning("Failed to register PID metrics", extra={"error": str(e)})

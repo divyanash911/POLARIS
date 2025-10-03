@@ -15,7 +15,7 @@ from .plugin_discovery import PluginDiscovery
 from ...domain.interfaces import ManagedSystemConnector
 from ...infrastructure.di import Injectable
 from ...infrastructure.exceptions import ConnectorError
-from ...infrastructure.observability.factory import get_framework_logger
+from ...infrastructure.observability import get_framework_logger
 
 
 class PolarisPluginRegistry(Injectable):

@@ -8,17 +8,22 @@ and fallback mechanisms.
 
 import asyncio
 import logging
+import sys
+import os
 from datetime import datetime, timezone
 from typing import Dict, Any
 
-from .fallback_reasoning_strategy import create_fallback_reasoning_strategy
-from .reasoning_engine import ReasoningContext
-from ..infrastructure.llm.client import OpenAIClient, MockLLMClient
-from ..infrastructure.llm.models import LLMConfiguration, LLMProvider
-from ..digital_twin.world_model import StatisticalWorldModel
-from ..digital_twin.knowledge_base import PolarisKnowledgeBase
-from ..infrastructure.data_storage import InMemoryDataStore
-from ..domain.models import MetricValue, SystemState, HealthStatus
+# Add src to path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../src'))
+
+from control_reasoning.fallback_reasoning_strategy import create_fallback_reasoning_strategy
+from control_reasoning.reasoning_engine import ReasoningContext
+from infrastructure.llm.client import OpenAIClient, MockLLMClient
+from infrastructure.llm.models import LLMConfiguration, LLMProvider
+from digital_twin.world_model import StatisticalWorldModel
+from digital_twin.knowledge_base import PolarisKnowledgeBase
+from infrastructure.data_storage import InMemoryDataStore
+from domain.models import MetricValue, SystemState, HealthStatus
 
 
 async def main():

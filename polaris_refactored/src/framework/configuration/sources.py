@@ -1,205 +1,184 @@
 """
-Configuration sources for loading configuration data.
+Configuration Sources
+
+Implements various configuration sources for the POLARIS framework.
 """
 
 import os
-import re
-from venv import logger
 import yaml
-from abc import ABC, abstractmethod
-from typing import Dict, Any, Union, List
 from pathlib import Path
+from typing import Dict, Any, Union
+from abc import ABC, abstractmethod
 
 from ...infrastructure.exceptions import ConfigurationError
 
 
 class ConfigurationSource(ABC):
-    """Abstract base class for configuration sources."""
+    """Base class for configuration sources."""
     
     @abstractmethod
-    def load(self) -> Dict[str, Any]:
-        """Load configuration data from the source."""
+    async def load(self) -> Dict[str, Any]:
+        """Load configuration data from this source."""
         pass
     
     @abstractmethod
     def get_priority(self) -> int:
-        """Get the priority of this source (higher number = higher priority)."""
+        """Get the priority of this configuration source."""
+        pass
+    
+    @abstractmethod
+    def has_changed(self) -> bool:
+        """Check if the configuration source has changed."""
         pass
 
 
 class YAMLConfigurationSource(ConfigurationSource):
-    """YAML file configuration source."""
+    """Configuration source that loads from YAML files."""
     
     def __init__(self, file_path: Union[str, Path], priority: int = 100):
         self.file_path = Path(file_path)
-        self.priority = priority
+        self._priority = priority
         self._last_modified = None
+        self._cached_config = None
     
-    def load(self) -> Dict[str, Any]:
+    async def load(self) -> Dict[str, Any]:
         """Load configuration from YAML file."""
-        if not self.file_path.exists():
-            raise ConfigurationError(
-                f"Configuration file not found: {self.file_path}",
-                "CONFIG_FILE_NOT_FOUND",
-                {"file_path": str(self.file_path)}
-            )
-        
         try:
+            if not self.file_path.exists():
+                raise ConfigurationError(
+                    f"Configuration file not found: {self.file_path}",
+                    config_path=str(self.file_path)
+                )
+            
             with open(self.file_path, 'r', encoding='utf-8') as f:
-                data = yaml.safe_load(f) or {}
-                return data
+                config = yaml.safe_load(f) or {}
+            
+            # Update cache
+            self._cached_config = config
+            self._last_modified = self.file_path.stat().st_mtime
+            
+            return config
+            
         except yaml.YAMLError as e:
             raise ConfigurationError(
                 f"Invalid YAML in configuration file: {self.file_path}",
-                "INVALID_YAML",
-                {"file_path": str(self.file_path), "yaml_error": str(e)}
-            ) from e
+                config_path=str(self.file_path),
+                validation_errors=[str(e)]
+            )
         except Exception as e:
             raise ConfigurationError(
-                f"Error reading configuration file: {self.file_path}",
-                "CONFIG_READ_ERROR",
-                {"file_path": str(self.file_path), "error": str(e)}
-            ) from e
+                f"Error loading configuration file: {self.file_path}",
+                config_path=str(self.file_path),
+                validation_errors=[str(e)]
+            )
     
     def get_priority(self) -> int:
-        return self.priority
+        """Get the priority of this configuration source."""
+        return self._priority
     
     def has_changed(self) -> bool:
-        """Check if the file has been modified since last load."""
+        """Check if the YAML file has been modified."""
         if not self.file_path.exists():
             return False
         
         current_modified = self.file_path.stat().st_mtime
-        if self._last_modified is None:
-            self._last_modified = current_modified
-            return False
-        
-        if current_modified != self._last_modified:
-            self._last_modified = current_modified
-            return True
-        
-        return False
+        return self._last_modified is None or current_modified != self._last_modified
 
 
 class EnvironmentConfigurationSource(ConfigurationSource):
-    """Environment variable configuration source."""
+    """Configuration source that loads from environment variables."""
     
     def __init__(self, prefix: str = "POLARIS_", priority: int = 200, validate: bool = True):
-        self.prefix = prefix.upper()
-        self.priority = priority
+        self.prefix = prefix
+        self._priority = priority
         self.validate = validate
+        self._cached_env = None
     
-    def load(self) -> Dict[str, Any]:
+    async def load(self) -> Dict[str, Any]:
         """Load configuration from environment variables."""
         config = {}
         
-        for key, value in os.environ.items():
-            if key.startswith(self.prefix):
-                if not value.strip():
-                    logger.warning(f"Empty environment variable: {key} [SKIPPING]")
-                    continue
-                # Remove prefix and convert to nested dict
-                config_key = key[len(self.prefix):].lower()
-                self._set_nested_value(config, config_key, self._parse_value(value, config_key))
+        # Get all environment variables with the prefix
+        env_vars = {k: v for k, v in os.environ.items() if k.startswith(self.prefix)}
         
+        for key, value in env_vars.items():
+            # Remove prefix and convert to nested dict
+            config_key = key[len(self.prefix):].lower()
+            
+            # Parse nested keys (e.g., POLARIS_LLM__PROVIDER -> llm.provider)
+            keys = config_key.split('__')
+            
+            # Parse value
+            parsed_value = self._parse_value(value, config_key)
+            
+            # Set nested value in config
+            self._set_nested_value(config, keys, parsed_value)
+        
+        self._cached_env = env_vars.copy()
         return config
     
-    def _set_nested_value(self, config: Dict[str, Any], key: str, value: Any) -> None:
-        """Set a nested configuration value using underscore notation."""
-        parts = key.split('_')
-        current = config
-        
-        # Handle special cases for configuration structure
-        # Convert FRAMEWORK_NATS_CONFIG_TIMEOUT to framework.nats_config.timeout
-        if len(parts) >= 3 and parts[1] in ['nats', 'telemetry', 'logging'] and parts[2] == 'config':
-            # Reconstruct as framework.{service}_config.{property}
-            service_config_key = f"{parts[1]}_config"
-            if parts[0] not in current:
-                current[parts[0]] = {}
-            if service_config_key not in current[parts[0]]:
-                current[parts[0]][service_config_key] = {}
-            
-            # Set the property in the service config
-            property_path = parts[3:]
-            target = current[parts[0]][service_config_key]
-            for part in property_path[:-1]:
-                if part not in target:
-                    target[part] = {}
-                target = target[part]
-            if property_path:
-                target[property_path[-1]] = value
-            else:
-                # If no property path, set the value directly
-                current[parts[0]][service_config_key] = value
-        else:
-            # Standard nested structure
-            for part in parts[:-1]:
-                if part not in current:
-                    current[part] = {}
-                elif not isinstance(current[part], dict):
-                    # Convert to dict if it's not already
-                    current[part] = {}
-                current = current[part]
-            
-            current[parts[-1]] = value
-    @staticmethod
-    def _parse_escaped_list(value: str) -> list[str]:
-        """
-        Parses a comma-separated string into a list, respecting the '/' escape character.
-        - A comma preceded by a slash (e.g., '/,') is treated as a literal comma.
-        - A slash preceded by a slash (e.g., '//') is treated as a literal slash.
-        """
-        if not value.strip():
-            return []
-
-        # Split by commas that are not preceded by a slash
-        items = re.split(r'(?<!\\),', value)
-        
-        # Clean up items: strip whitespace and replace escaped characters
-        cleaned_items = []
-        for item in items:
-            # Replace escaped commas and slashes with their literal values
-            # and strip whitespace from the final item.
-            cleaned_item = item.replace('\\,', ',').replace('\\\\', '\\').strip()
-            cleaned_items.append(cleaned_item)
-            
-        return cleaned_items
-
     def _parse_value(self, value: str, key: str = "") -> Any:
         """Parse environment variable value to appropriate type."""
-        # Try to parse as boolean
+        # Handle boolean values
         if value.lower() in ('true', 'false'):
             return value.lower() == 'true'
         
-        # Try to parse as integer
+        # Handle numeric values
         try:
-            return int(value)
+            if '.' in value:
+                return float(value)
+            else:
+                return int(value)
         except ValueError:
             pass
         
-        # Try to parse as float
-        try:
-            return float(value)
-        except ValueError:
-            pass
-        
-        # Handle known list fields - even single values should be converted to lists
-        list_fields = {
-            'framework_nats_config_servers',
-            'framework_plugin_search_paths'
-        }
-        
-        if key.lower() in list_fields:
+        # Handle list values (comma-separated)
+        if ',' in value:
             return self._parse_escaped_list(value)
         
-        value = self._parse_escaped_list(value)
-
-        # If the value is a list with a single element
-        # return the element for generic keys
-        if len(value) == 1:
-            return value[0]
-
+        # Return as string
         return value
     
+    def _parse_escaped_list(self, value: str) -> list:
+        """Parse comma-separated list with escape handling."""
+        items = []
+        current_item = ""
+        escaped = False
+        
+        for char in value:
+            if escaped:
+                current_item += char
+                escaped = False
+            elif char == '\\':
+                escaped = True
+            elif char == ',':
+                items.append(current_item.strip())
+                current_item = ""
+            else:
+                current_item += char
+        
+        if current_item:
+            items.append(current_item.strip())
+        
+        return items
+    
+    def _set_nested_value(self, config: Dict[str, Any], key: str, value: Any) -> None:
+        """Set a nested value in the configuration dictionary."""
+        keys = key if isinstance(key, list) else [key]
+        
+        current = config
+        for k in keys[:-1]:
+            if k not in current:
+                current[k] = {}
+            current = current[k]
+        
+        current[keys[-1]] = value
+    
     def get_priority(self) -> int:
-        return self.priority
+        """Get the priority of this configuration source."""
+        return self._priority
+    
+    def has_changed(self) -> bool:
+        """Check if environment variables have changed."""
+        current_env = {k: v for k, v in os.environ.items() if k.startswith(self.prefix)}
+        return self._cached_env != current_env

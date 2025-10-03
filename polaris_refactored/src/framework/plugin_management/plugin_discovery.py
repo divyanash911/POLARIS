@@ -10,7 +10,7 @@ import inspect
 import logging
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import yaml
 
 from .plugin_descriptor import PluginDescriptor
@@ -213,7 +213,7 @@ class PluginDiscovery:
             logger.error(f"Error inferring plugin from {connector_file}: {e}")
             return None
     
-    def load_connector_from_plugin(self, plugin: PluginDescriptor, loaded_modules: dict) -> Optional[object]:
+    def load_connector_from_plugin(self, plugin: PluginDescriptor, loaded_modules: dict, system_config: Optional[Dict[str, Any]] = None) -> Optional[object]:
         """Load a connector instance from a plugin descriptor with security validation."""
         try:
             # Determine module path and name
@@ -270,9 +270,15 @@ class PluginDiscovery:
                     raise ValueError(f"Connector validation failed: {validation_errors}")
                 
                 # Create connector instance
-                # Note: We'll need system configuration for full initialization
-                # For now, create with minimal config
-                connector = connector_class()
+                # Try to create with system configuration if provided
+                if system_config:
+                    try:
+                        connector = connector_class(system_config)
+                    except TypeError:
+                        # Fallback: connector doesn't accept config in constructor
+                        connector = connector_class()
+                else:
+                    connector = connector_class()
                 
                 logger.info(
                     f"Connector instantiated: {plugin.plugin_id}",

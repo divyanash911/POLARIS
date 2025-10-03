@@ -30,19 +30,35 @@ class ManagedSystemConnectorFactory(Injectable):
     def create_connector(self, system_id: str, system_config: Optional[Dict[str, Any]] = None) -> Optional[ManagedSystemConnector]:
         """Create a connector for the specified system with configuration."""
         try:
-            # Load the connector from registry
+            # If we have configuration, try to create a new instance with config
+            if system_config:
+                # Get the plugin descriptor to create a new instance
+                plugin_descriptors = self.plugin_registry.get_plugin_descriptors()
+                plugin = plugin_descriptors.get(system_id)
+                
+                if plugin and plugin.is_valid:
+                    try:
+                        # Create new instance with configuration
+                        connector = self.plugin_registry._discovery.load_connector_from_plugin(
+                            plugin, 
+                            self.plugin_registry._loaded_modules,
+                            system_config=system_config
+                        )
+                        if connector:
+                            return connector
+                    except Exception as e:
+                        logger.debug(f"Could not create connector with config: {e}")
+            
+            # Fallback: Load the connector from registry (without config)
             connector = self.plugin_registry.load_managed_system_connector(system_id)
             
             if connector and system_config:
-                # Configure the connector if configuration is provided
+                # Try to configure the connector if configuration is provided
                 if hasattr(connector, 'configure'):
                     connector.configure(system_config)
-                elif hasattr(connector, '__init__') and system_config:
-                    # If connector expects config in constructor, we'd need to recreate it
-                    # For now, log a warning
-                    logger.warning(
-                        f"Connector {system_id} loaded but configuration cannot be applied post-creation"
-                    )
+                else:
+                    # This is expected for connectors that take config in constructor
+                    logger.debug(f"Connector {system_id} loaded without configuration (expected for constructor-based config)")
             
             return connector
             

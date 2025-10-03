@@ -1,20 +1,17 @@
 """
-Plugin Management System for POLARIS
+Plugin Management System
 
-This package provides comprehensive plugin discovery, loading, and lifecycle management
-for POLARIS managed system connectors with security validation and hot-reloading capabilities.
+Provides plugin discovery, loading, and management capabilities.
 """
 
-from .plugin_descriptor import PluginDescriptor
-from .plugin_validator import PluginValidator
-from .plugin_discovery import PluginDiscovery
 from .plugin_registry import PolarisPluginRegistry
+from .plugin_descriptor import PluginDescriptor
+from .plugin_discovery import PluginDiscovery
 from .connector_factory import ManagedSystemConnectorFactory
 
 __all__ = [
-    'PluginDescriptor',
-    'PluginValidator', 
-    'PluginDiscovery',
     'PolarisPluginRegistry',
+    'PluginDescriptor',
+    'PluginDiscovery',
     'ManagedSystemConnectorFactory'
 ]
