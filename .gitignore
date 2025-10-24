@@ -7,3 +7,7 @@
 
 coverage.json
 htmlcov
+build/
+data/
+*.zip
+*.pt
