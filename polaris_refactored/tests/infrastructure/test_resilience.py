@@ -7,13 +7,13 @@ import pytest
 from datetime import datetime, timezone, timedelta
 from unittest.mock import AsyncMock, Mock
 
-from polaris_refactored.src.infrastructure.resilience import (
+from infrastructure.resilience import (
     CircuitBreaker, CircuitBreakerConfig, CircuitBreakerState, CircuitBreakerError,
     RetryPolicy, RetryConfig,
     Bulkhead, BulkheadConfig, BulkheadError,
     ResilienceManager
 )
-from polaris_refactored.src.infrastructure.exceptions import PolarisException
+from infrastructure.exceptions import PolarisException
 
 
 class TestCircuitBreaker:

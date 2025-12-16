@@ -2,11 +2,11 @@ import asyncio
 from datetime import datetime, timezone
 import pytest
 
-from polaris_refactored.src.infrastructure.data_storage import InMemoryGraphStorageBackend, PolarisDataStore
-from polaris_refactored.src.digital_twin.knowledge_base import PolarisKnowledgeBase
-from polaris_refactored.src.digital_twin.telemetry_subscriber import subscribe_telemetry_persistence
-from polaris_refactored.src.framework.events import PolarisEventBus, TelemetryEvent
-from polaris_refactored.src.domain.models import SystemState, MetricValue, HealthStatus
+from infrastructure.data_storage import InMemoryGraphStorageBackend, PolarisDataStore
+from digital_twin.knowledge_base import PolarisKnowledgeBase
+from digital_twin.telemetry_subscriber import subscribe_telemetry_persistence
+from framework.events import PolarisEventBus, TelemetryEvent
+from domain.models import SystemState, MetricValue, HealthStatus
 
 
 @pytest.mark.asyncio

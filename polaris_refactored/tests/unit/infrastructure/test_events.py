@@ -10,14 +10,14 @@ from datetime import datetime, timezone
 from unittest.mock import Mock, AsyncMock
 from typing import List
 
-from polaris_refactored.src.framework.events import (
+from framework.events import (
     PolarisEvent, TelemetryEvent, AdaptationEvent, ExecutionResultEvent,
     PolarisEventBus, EventSubscription, EventMetadata, EventProcessingError
 )
-from polaris_refactored.src.domain.models import (
+from domain.models import (
     SystemState, AdaptationAction, ExecutionResult, MetricValue, HealthStatus, ExecutionStatus
 )
-from polaris_refactored.src.domain.interfaces import EventHandler
+from domain.interfaces import EventHandler
 
 
 class MockEventHandler(EventHandler):

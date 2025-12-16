@@ -9,7 +9,7 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 
-from ..infrastructure.observability import get_logger
+from infrastructure.observability import get_logger
 
 
 @dataclass

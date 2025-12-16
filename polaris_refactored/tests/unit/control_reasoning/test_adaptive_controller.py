@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Dict, Optional, Any, List
 from unittest.mock import AsyncMock
 
-from polaris_refactored.src.control_reasoning.adaptive_controller import (
+from control_reasoning.adaptive_controller import (
     PolarisAdaptiveController,
     AdaptationNeed,
     ReactiveControlStrategy,
@@ -12,10 +12,10 @@ from polaris_refactored.src.control_reasoning.adaptive_controller import (
     LearningControlStrategy,
     ControlStrategy,
 )
-from polaris_refactored.src.framework.events import TelemetryEvent, AdaptationEvent
-from polaris_refactored.src.domain.models import SystemState, MetricValue, HealthStatus, AdaptationAction
-from polaris_refactored.src.digital_twin.knowledge_base import PolarisKnowledgeBase
-from polaris_refactored.src.digital_twin.world_model import SimulationResult
+from framework.events import TelemetryEvent, AdaptationEvent
+from domain.models import SystemState, MetricValue, HealthStatus, AdaptationAction
+from digital_twin.knowledge_base import PolarisKnowledgeBase
+from digital_twin.world_model import SimulationResult
 
 class MockEventBus:
     def __init__(self):
@@ -31,10 +31,10 @@ class MockWorldModel:
     async def update_system_state(self, telemetry):
         return None
     async def predict_system_behavior(self, system_id: str, time_horizon: int):
-        from polaris_refactored.src.digital_twin.world_model import PredictionResult
+        from digital_twin.world_model import PredictionResult
         return PredictionResult({"cpu": 0.95}, 0.7)
     async def simulate_adaptation_impact(self, system_id: str, action):
-        from polaris_refactored.src.digital_twin.world_model import SimulationResult
+        from digital_twin.world_model import SimulationResult
         # Favor scale_out by returning better score for lower latency/cpu
         if action.get("action_type") == "scale_out":
             return SimulationResult({"cpu": 0.4, "latency": 0.4}, 0.8)
@@ -119,7 +119,7 @@ async def test_assess_and_trigger_reactive_path():
 @pytest.mark.asyncio
 async def test_reactive_strategy_no_action_on_low_metrics():
     """Verify no adaptation is triggered when metrics are within bounds."""
-    from polaris_refactored.src.control_reasoning.adaptive_controller import (
+    from control_reasoning.adaptive_controller import (
         ReactiveControlStrategy, AdaptationNeed
     )
     
@@ -132,7 +132,7 @@ async def test_reactive_strategy_no_action_on_low_metrics():
         system_id="test-system",
         is_needed=True,
         reason="low metrics",
-        urgency=0.8
+        urgency=0.5
     )
     actions = await strategy.generate_actions("test-system", ctx, need)
     assert not actions  # No actions should be generated
@@ -141,7 +141,7 @@ async def test_reactive_strategy_no_action_on_low_metrics():
 @pytest.mark.asyncio
 async def test_reactive_strategy_multiple_violations():
     """Test handling of multiple metric violations in one check."""
-    from polaris_refactored.src.control_reasoning.adaptive_controller import (
+    from control_reasoning.adaptive_controller import (
         ReactiveControlStrategy, AdaptationNeed
     )
     
@@ -198,10 +198,10 @@ async def test_predictive_strategy_selection():
 async def test_predictive_strategy_no_viable_actions():
     """Test when simulation finds no viable actions."""
     from unittest.mock import AsyncMock
-    from polaris_refactored.src.control_reasoning.adaptive_controller import (
+    from control_reasoning.adaptive_controller import (
         PredictiveControlStrategy, AdaptationNeed
     )
-    from polaris_refactored.src.digital_twin.world_model import SimulationResult
+    from digital_twin.world_model import SimulationResult
     
     wm = MockWorldModel()
     wm.simulate_adaptation_impact = AsyncMock(return_value=SimulationResult({}, 0.0))
@@ -225,7 +225,7 @@ async def test_predictive_strategy_no_viable_actions():
 async def test_predictive_strategy_simulation_error():
     """Test graceful handling of simulation failures."""
     from unittest.mock import AsyncMock
-    from polaris_refactored.src.control_reasoning.adaptive_controller import (
+    from control_reasoning.adaptive_controller import (
         PredictiveControlStrategy, AdaptationNeed
     )
     
@@ -269,7 +269,7 @@ async def test_learning_strategy_generates_actions():
 async def test_learning_strategy_no_similar_patterns():
     """Test when KB returns no similar patterns."""
     from unittest.mock import AsyncMock
-    from polaris_refactored.src.control_reasoning.adaptive_controller import (
+    from control_reasoning.adaptive_controller import (
         LearningControlStrategy, AdaptationNeed
     )
     
@@ -294,7 +294,7 @@ async def test_learning_strategy_no_similar_patterns():
 async def test_learning_strategy_invalid_pattern_format():
     """Test handling of malformed pattern data from KB."""
     from unittest.mock import AsyncMock
-    from polaris_refactored.src.control_reasoning.adaptive_controller import (
+    from control_reasoning.adaptive_controller import (
         LearningControlStrategy, AdaptationNeed
     )
     

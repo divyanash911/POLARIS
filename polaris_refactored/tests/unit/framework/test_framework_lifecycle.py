@@ -1,12 +1,13 @@
 import asyncio
 import pytest
 
-from polaris_refactored.src.framework.polaris_framework import PolarisFramework
-from polaris_refactored.src.infrastructure.di import DIContainer
-from polaris_refactored.src.infrastructure.exceptions import PolarisException
-from polaris_refactored.src.framework.events import PolarisEventBus
-from polaris_refactored.src.digital_twin import PolarisWorldModel, PolarisKnowledgeBase, PolarisLearningEngine
-from polaris_refactored.src.control_reasoning import PolarisAdaptiveController, PolarisReasoningEngine
+from framework.polaris_framework import PolarisFramework
+from framework.configuration import PolarisConfiguration
+from infrastructure.di import DIContainer
+from infrastructure.exceptions import PolarisException
+from framework.events import PolarisEventBus
+from digital_twin import PolarisWorldModel, PolarisKnowledgeBase, PolarisLearningEngine
+from control_reasoning import PolarisAdaptiveController, PolarisReasoningEngine
 
 
 class FakeService:
@@ -40,7 +41,7 @@ class FakePluginRegistry:
         self.unloaded = False
         self.fail_on_load = fail_on_load
 
-    async def initialize(self):
+    async def initialize(self, *args, **kwargs):
         self.initialized = True
 
     async def shutdown(self):
@@ -56,7 +57,14 @@ class FakePluginRegistry:
 
 
 class FakeEventBus(FakeService):
-    pass
+    async def subscribe(self, *args, **kwargs):
+        return "fake_sub_id"
+
+    async def subscribe_to_telemetry(self, *args, **kwargs):
+        return "fake_sub_id"
+
+    def unsubscribe(self, *args, **kwargs):
+        pass
 
 
 class FakeComponent:
@@ -85,7 +93,7 @@ async def test_framework_start_stop_order_and_status():
 
     framework = PolarisFramework(
         container=container,
-        configuration=None,
+        configuration=PolarisConfiguration(),
         message_bus=msg_bus,
         data_store=data_store,
         plugin_registry=plugin_registry,
@@ -126,7 +134,7 @@ async def test_framework_idempotent_start_stop():
 
     framework = PolarisFramework(
         container=container,
-        configuration=None,
+        configuration=PolarisConfiguration(),
         message_bus=FakeMessageBus(),
         data_store=FakeDataStore(),
         plugin_registry=FakePluginRegistry(),
@@ -161,7 +169,7 @@ async def test_framework_cleanup_on_failure_during_adapters():
 
     framework = PolarisFramework(
         container=container,
-        configuration=None,
+        configuration=PolarisConfiguration(),
         message_bus=msg_bus,
         data_store=data_store,
         plugin_registry=plugin_registry,

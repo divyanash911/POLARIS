@@ -1,15 +1,15 @@
 import asyncio
 import pytest
 
-from polaris_refactored.src.adapters.execution_adapter import (
+from adapters.execution_adapter import (
     ActionExecutionPipeline,
     ValidationStage,
     PreConditionCheckStage,
     ActionExecutionStage,
     PostExecutionVerificationStage,
 )
-from polaris_refactored.src.domain.models import AdaptationAction, ExecutionStatus, SystemState, MetricValue, HealthStatus, ExecutionResult
-from polaris_refactored.src.domain.interfaces import ManagedSystemConnector
+from domain.models import AdaptationAction, ExecutionStatus, SystemState, MetricValue, HealthStatus, ExecutionResult
+from domain.interfaces import ManagedSystemConnector
 from datetime import datetime, timezone
 
 

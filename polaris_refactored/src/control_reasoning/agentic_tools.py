@@ -9,12 +9,12 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone, timedelta
 
-from ..infrastructure.llm.tool_registry import BaseTool, ToolRegistry
-from ..infrastructure.llm.models import ToolSchema
-from ..infrastructure.llm.exceptions import LLMToolError
-from ..digital_twin.world_model import PolarisWorldModel, PredictionResult, SimulationResult
-from ..digital_twin.knowledge_base import PolarisKnowledgeBase
-from ..domain.models import SystemState, AdaptationAction, HealthStatus
+from infrastructure.llm.tool_registry import BaseTool, ToolRegistry
+from infrastructure.llm.models import ToolSchema
+from infrastructure.llm.exceptions import LLMToolError
+from digital_twin.world_model import PolarisWorldModel, PredictionResult, SimulationResult
+from digital_twin.knowledge_base import PolarisKnowledgeBase
+from domain.models import SystemState, AdaptationAction, HealthStatus
 
 
 class WorldModelTool(BaseTool):
@@ -689,7 +689,7 @@ def create_agentic_tool_registry(
     knowledge_base: PolarisKnowledgeBase
 ) -> ToolRegistry:
     """Create a tool registry with all agentic reasoning tools."""
-    from ..infrastructure.llm.tool_registry import ToolRegistry
+    from infrastructure.llm.tool_registry import ToolRegistry
     
     registry = ToolRegistry()
     

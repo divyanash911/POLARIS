@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch, AsyncMock
 from datetime import datetime, timezone
 
 from polaris_refactored.plugins.swim.connector import SwimTCPConnector
-from polaris_refactored.src.domain.models import AdaptationAction, HealthStatus, ExecutionStatus
+from domain.models import AdaptationAction, HealthStatus, ExecutionStatus
 
 
 class TestSwimConnectorMigration:

@@ -1,7 +1,7 @@
 import time
 import pytest
 
-from polaris_refactored.src.framework.plugin_management.plugin_registry import PolarisPluginRegistry
+from framework.plugin_management.plugin_registry import PolarisPluginRegistry
 
 
 @pytest.mark.asyncio

@@ -12,15 +12,15 @@ from pathlib import Path
 from typing import Dict, Any, List
 from unittest.mock import Mock, patch
 
-from polaris_refactored.src.framework.plugin_management import (
+from framework.plugin_management import (
     PolarisPluginRegistry,
     ManagedSystemConnectorFactory,
     PluginDescriptor,
     PluginValidator
 )
-from polaris_refactored.src.domain.interfaces import ManagedSystemConnector
-from polaris_refactored.src.domain.models import SystemState, AdaptationAction, ExecutionResult, MetricValue
-from polaris_refactored.src.infrastructure.exceptions import ConnectorError
+from domain.interfaces import ManagedSystemConnector
+from domain.models import SystemState, AdaptationAction, ExecutionResult, MetricValue
+from infrastructure.exceptions import ConnectorError
 
 
 class MockManagedSystemConnector(ManagedSystemConnector):
@@ -88,20 +88,23 @@ class TestPluginValidator:
 
     def test_validate_valid_connector_class(self):
         """Test validation of a valid connector class."""
-        errors = PluginValidator.validate_connector_class(
+        validator = PluginValidator()
+        errors = validator.validate_connector_class(
             MockManagedSystemConnector)
         assert len(errors) == 0
 
     def test_validate_invalid_connector_class(self):
         """Test validation of invalid connector class."""
-        errors = PluginValidator.validate_connector_class(InvalidConnector)
+        validator = PluginValidator()
+        errors = validator.validate_connector_class(InvalidConnector)
         assert len(errors) > 0
         assert any(
             "must inherit from ManagedSystemConnector" in error for error in errors)
 
     def test_validate_incomplete_connector_class(self):
         """Test validation of incomplete connector class."""
-        errors = PluginValidator.validate_connector_class(IncompleteConnector)
+        validator = PluginValidator()
+        errors = validator.validate_connector_class(IncompleteConnector)
         assert len(errors) > 0
         # Should have errors for missing methods
         missing_methods = ["disconnect", "get_system_id", "collect_metrics",
@@ -112,21 +115,23 @@ class TestPluginValidator:
 
     def test_validate_plugin_metadata_valid(self):
         """Test validation of valid plugin metadata."""
+        validator = PluginValidator()
         metadata = {
             "name": "test_plugin",
             "version": "1.0.0",
             "connector_class": "TestConnector"
         }
-        errors = PluginValidator.validate_plugin_metadata(metadata)
+        errors = validator.validate_plugin_metadata(metadata)
         assert len(errors) == 0
 
     def test_validate_plugin_metadata_missing_fields(self):
         """Test validation of metadata with missing fields."""
+        validator = PluginValidator()
         metadata = {
             "name": "test_plugin"
             # Missing version and connector_class
         }
-        errors = PluginValidator.validate_plugin_metadata(metadata)
+        errors = validator.validate_plugin_metadata(metadata)
         assert len(errors) == 2
         assert any("version" in error for error in errors)
         assert any("connector_class" in error for error in errors)
@@ -154,8 +159,8 @@ class TestPolarisPluginRegistry:
 
         # Create connector.py with absolute imports
         connector_code = f"""
-from polaris_refactored.src.domain.interfaces import ManagedSystemConnector
-from polaris_refactored.src.domain.models import SystemState, AdaptationAction, ExecutionResult, MetricValue
+from domain.interfaces import ManagedSystemConnector
+from domain.models import SystemState, AdaptationAction, ExecutionResult, MetricValue
 from typing import Dict, List
 
 class {plugin_name.title()}Connector(ManagedSystemConnector):

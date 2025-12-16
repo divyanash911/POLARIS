@@ -13,8 +13,8 @@ from abc import ABC, abstractmethod
 from typing import Optional
 from datetime import datetime, timezone
 
-from ...framework.plugin_management import ManagedSystemConnectorFactory
-from ...infrastructure.observability.factory import get_logger
+from framework.plugin_management import ManagedSystemConnectorFactory
+from infrastructure.observability.factory import get_logger
 
 from .monitor_types import MonitoringTarget, CollectionResult
 

@@ -13,16 +13,16 @@ from typing import List, Dict, Any, Optional
 from unittest.mock import Mock, patch
 from io import StringIO
 
-from polaris_refactored.src.infrastructure.observability.factory import (
+from infrastructure.observability.factory import (
     LoggerFactory, get_polaris_logger, configure_logging, reset_logging,
     TemporaryLoggingConfig
 )
-from polaris_refactored.src.infrastructure.observability.logging import (
+from infrastructure.observability.logging import (
     PolarisLogger, LogLevel, LogHandler, LogFormatter, JSONLogFormatter, 
     HumanReadableFormatter
 )
 
-from polaris_refactored.src.framework.configuration.models import LoggingConfiguration
+from framework.configuration.models import LoggingConfiguration
 
 
 class TestLogHandler(LogHandler):

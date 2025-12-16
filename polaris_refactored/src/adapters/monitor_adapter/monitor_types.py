@@ -25,7 +25,7 @@ from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, field
 from enum import Enum
 
-from ...domain.models import MetricValue
+from domain.models import MetricValue
 
 
 logger = logging.getLogger(__name__)

@@ -1,13 +1,13 @@
 import pytest
 from datetime import datetime, timezone
 
-from polaris_refactored.src.digital_twin.world_model import (
+from digital_twin.world_model import (
     CompositeWorldModel,
     StatisticalWorldModel,
     MLWorldModel,
 )
-from polaris_refactored.src.framework.events import TelemetryEvent
-from polaris_refactored.src.domain.models import SystemState, MetricValue, HealthStatus
+from framework.events import TelemetryEvent
+from domain.models import SystemState, MetricValue, HealthStatus
 
 
 @pytest.mark.asyncio
@@ -22,10 +22,10 @@ async def test_composite_model_tolerates_internal_errors():
 
     class GoodModel(MLWorldModel):
         async def predict_system_behavior(self, system_id: str, time_horizon: int):
-            from polaris_refactored.src.digital_twin.world_model import PredictionResult
+            from digital_twin.world_model import PredictionResult
             return PredictionResult({"cpu": 0.9}, 0.8)
         async def simulate_adaptation_impact(self, system_id: str, action):
-            from polaris_refactored.src.digital_twin.world_model import SimulationResult
+            from digital_twin.world_model import SimulationResult
             return SimulationResult({"latency": 120.0}, 0.7)
 
     comp = CompositeWorldModel([BadModel(), GoodModel()])

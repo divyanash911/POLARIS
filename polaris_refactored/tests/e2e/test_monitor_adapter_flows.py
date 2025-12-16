@@ -8,22 +8,22 @@ from typing import List
 
 import pytest
 
-from polaris_refactored.src.adapters.base_adapter import AdapterConfiguration
-from polaris_refactored.src.adapters.monitor_adapter.monitor_adapter import MonitorAdapter
-from polaris_refactored.src.adapters.monitor_adapter.monitor_types import MetricCollectionMode
-from polaris_refactored.src.adapters.execution_adapter.execution_adapter import ExecutionAdapter
-from polaris_refactored.src.framework.events import PolarisEventBus, TelemetryEvent, ExecutionResultEvent
-from polaris_refactored.src.digital_twin.knowledge_base import PolarisKnowledgeBase
-from polaris_refactored.src.infrastructure.data_storage.data_store import PolarisDataStore
-from polaris_refactored.src.infrastructure.data_storage.storage_backend import InMemoryGraphStorageBackend
-from polaris_refactored.src.control_reasoning.adaptive_controller import PolarisAdaptiveController
+from adapters.base_adapter import AdapterConfiguration
+from adapters.monitor_adapter.monitor_adapter import MonitorAdapter
+from adapters.monitor_adapter.monitor_types import MetricCollectionMode
+from adapters.execution_adapter.execution_adapter import ExecutionAdapter
+from framework.events import PolarisEventBus, TelemetryEvent, ExecutionResultEvent
+from digital_twin.knowledge_base import PolarisKnowledgeBase
+from infrastructure.data_storage.data_store import PolarisDataStore
+from infrastructure.data_storage.storage_backend import InMemoryGraphStorageBackend
+from control_reasoning.adaptive_controller import PolarisAdaptiveController
 
 from pathlib import Path
 import sys 
 sys.path.insert(0, str(Path(__file__).parent ))
 
 from helpers import FullMockConnector, FakePluginRegistry, make_execution_adapter_config
-from polaris_refactored.src.domain.models import MetricValue
+from domain.models import MetricValue
 
 
 @pytest.fixture

@@ -16,8 +16,8 @@ import inspect
 from .logging import PolarisLogger, get_logger, LogLevel, configure_default_logging
 from .metrics import PolarisMetricsCollector, get_metrics_collector, Timer
 from .tracing import PolarisTracer, get_tracer, SpanKind, configure_tracing, trace_polaris_method
-from ..di import Injectable
-from ..exceptions import PolarisException
+from infrastructure.di import Injectable
+from infrastructure.exceptions import PolarisException
 
 F = TypeVar('F', bound=Callable[..., Any])
 

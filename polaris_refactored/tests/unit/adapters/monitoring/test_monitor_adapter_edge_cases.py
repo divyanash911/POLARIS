@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from unittest import mock
 from unittest.mock import AsyncMock, patch, MagicMock, DEFAULT
 
-from polaris_refactored.src.adapters.monitor_adapter import (
+from adapters.monitor_adapter import (
     MonitorAdapter,
     MetricCollectionStrategy,
     DirectConnectorStrategy,
@@ -20,10 +20,10 @@ from polaris_refactored.src.adapters.monitor_adapter import (
     CollectionResult,
     MetricCollectionMode
 )
-from polaris_refactored.src.adapters.base_adapter import AdapterConfiguration, AdapterValidationError
-from polaris_refactored.src.framework.events import PolarisEventBus, TelemetryEvent
-from polaris_refactored.src.domain.models import MetricValue, SystemState, HealthStatus
-from polaris_refactored.src.domain.interfaces import ManagedSystemConnector
+from adapters.base_adapter import AdapterConfiguration, AdapterValidationError
+from framework.events import PolarisEventBus, TelemetryEvent
+from domain.models import MetricValue, SystemState, HealthStatus
+from domain.interfaces import ManagedSystemConnector
 
 class FailingConnector(ManagedSystemConnector):
     """A connector that fails in various ways for testing error handling."""

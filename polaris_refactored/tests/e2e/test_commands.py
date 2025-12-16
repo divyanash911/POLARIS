@@ -11,16 +11,16 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, AsyncMock
 from typing import List
 
-from polaris_refactored.src.framework.commands import (
+from framework.commands import (
     PolarisAdaptationCommand, CommandStatus, CommandPriority, CommandContext,
     CommandResult, CommandQueue, PolarisCommandProcessor, CommandValidationError,
     CommandExecutionError
 )
-from polaris_refactored.src.framework.events import PolarisEventBus, ExecutionResultEvent
-from polaris_refactored.src.domain.models import (
+from framework.events import PolarisEventBus, ExecutionResultEvent
+from domain.models import (
     AdaptationAction, ExecutionResult, SystemState, MetricValue, HealthStatus, ExecutionStatus
 )
-from polaris_refactored.src.domain.interfaces import ManagedSystemConnector
+from domain.interfaces import ManagedSystemConnector
 
 
 class MockManagedSystemConnector(ManagedSystemConnector):

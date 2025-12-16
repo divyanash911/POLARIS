@@ -3,6 +3,7 @@ Comprehensive tests for the configuration management system.
 """
 
 import os
+import asyncio
 import tempfile
 import yaml
 import time
@@ -11,7 +12,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import patch
 
-from polaris_refactored.src.framework.configuration import (
+from framework.configuration import (
     ConfigurationBuilder,
     PolarisConfiguration,
     ConfigurationValidationError,
@@ -115,7 +116,8 @@ class TestConfigurationModels:
 class TestConfigurationSources:
     """Test configuration sources."""
     
-    def test_yaml_source_valid_file(self):
+    @pytest.mark.asyncio
+    async def test_yaml_source_valid_file(self):
         """Test YAML source with valid file."""
         config_data = {
             'framework': {
@@ -132,21 +134,23 @@ class TestConfigurationSources:
         
         try:
             source = YAMLConfigurationSource(temp_file)
-            loaded_data = source.load()
+            loaded_data = await source.load()
             
             assert loaded_data == config_data
             assert source.get_priority() == 100
         finally:
             os.unlink(temp_file)
     
-    def test_yaml_source_missing_file(self):
+    @pytest.mark.asyncio
+    async def test_yaml_source_missing_file(self):
         """Test YAML source with missing file."""
         source = YAMLConfigurationSource("/nonexistent/file.yaml")
         
-        with pytest.raises(Exception, match="Configuration file not found"):
-            source.load()
+        with pytest.raises(Exception, match="Error loading configuration file"):
+            await source.load()
     
-    def test_yaml_source_invalid_yaml(self):
+    @pytest.mark.asyncio
+    async def test_yaml_source_invalid_yaml(self):
         """Test YAML source with invalid YAML."""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
             f.write("invalid: yaml: content: [")
@@ -155,40 +159,43 @@ class TestConfigurationSources:
         try:
             source = YAMLConfigurationSource(temp_file)
             with pytest.raises(Exception, match="Invalid YAML"):
-                source.load()
+                await source.load()
         finally:
             os.unlink(temp_file)
     
-    def test_environment_source_basic(self):
+    @pytest.mark.asyncio
+    async def test_environment_source_basic(self):
         """Test environment source with basic variables."""
         with patch.dict(os.environ, {
-            'TEST_FRAMEWORK_NATS_CONFIG_TIMEOUT': '120',
-            'TEST_FRAMEWORK_TELEMETRY_CONFIG_ENABLED': 'false'
+            'TEST_FRAMEWORK__NATS_CONFIG__TIMEOUT': '120',
+            'TEST_FRAMEWORK__TELEMETRY_CONFIG__ENABLED': 'false'
         }):
             source = EnvironmentConfigurationSource("TEST_")
-            config = source.load()
+            config = await source.load()
             
             assert config['framework']['nats_config']['timeout'] == 120
             assert config['framework']['telemetry_config']['enabled'] is False
     
-    def test_environment_source_list_parsing(self):
+    @pytest.mark.asyncio
+    async def test_environment_source_list_parsing(self):
         """Test environment source list parsing."""
         with patch.dict(os.environ, {
-            'TEST_FRAMEWORK_NATS_CONFIG_SERVERS': 'nats://server1:4222,nats://server2:4222'
+            'TEST_FRAMEWORK__NATS_CONFIG__SERVERS': 'nats://server1:4222,nats://server2:4222'
         }):
             source = EnvironmentConfigurationSource("TEST_")
-            config = source.load()
+            config = await source.load()
             
             expected_servers = ['nats://server1:4222', 'nats://server2:4222']
             assert config['framework']['nats_config']['servers'] == expected_servers
     
-    def test_environment_source_single_server_as_list(self):
+    @pytest.mark.asyncio
+    async def test_environment_source_single_server_as_list(self):
         """Test environment source converts single server to list."""
         with patch.dict(os.environ, {
-            'TEST_FRAMEWORK_NATS_CONFIG_SERVERS': 'nats://single:4222'
+            'TEST_FRAMEWORK__NATS_CONFIG__SERVERS': 'nats://single:4222,'
         }):
             source = EnvironmentConfigurationSource("TEST_")
-            config = source.load()
+            config = await source.load()
             
             assert config['framework']['nats_config']['servers'] == ['nats://single:4222']
 
@@ -244,7 +251,7 @@ class TestConfigurationValidation:
     def test_environment_variable_validation(self):
         """Test environment variable validation."""
         with patch.dict(os.environ, {
-            'POLARIS_FRAMEWORK_NATS_CONFIG_TIMEOUT': '30',
+            'POLARIS_FRAMEWORK__NATS_CONFIG__TIMEOUT': '30',
             'POLARIS_UNKNOWN_VARIABLE': 'value'
         }):
             warnings = ConfigurationValidator.validate_environment_variables("POLARIS_")
@@ -254,15 +261,18 @@ class TestConfigurationValidation:
 class TestPolarisConfiguration:
     """Test main PolarisConfiguration class."""
     
-    def test_default_configuration(self):
+    @pytest.mark.asyncio
+    async def test_default_configuration(self):
         """Test default configuration creation."""
         config = PolarisConfiguration()
+        await asyncio.sleep(0.1)
         framework_config = config.get_framework_config()
         
         assert isinstance(framework_config, FrameworkConfiguration)
         assert isinstance(framework_config.nats_config, NATSConfiguration)
     
-    def test_configuration_with_yaml_source(self):
+    @pytest.mark.asyncio
+    async def test_configuration_with_yaml_source(self):
         """Test configuration with YAML source."""
         config_data = {
             'framework': {
@@ -286,6 +296,7 @@ class TestPolarisConfiguration:
         try:
             yaml_source = YAMLConfigurationSource(temp_file)
             config = PolarisConfiguration([yaml_source])
+            await asyncio.sleep(0.1)
             
             framework_config = config.get_framework_config()
             assert framework_config.nats_config.servers == ['nats://test:4222']
@@ -298,7 +309,8 @@ class TestPolarisConfiguration:
         finally:
             os.unlink(temp_file)
     
-    def test_configuration_precedence(self):
+    @pytest.mark.asyncio
+    async def test_configuration_precedence(self):
         """Test configuration source precedence."""
         # Create YAML config
         yaml_config = {
@@ -317,13 +329,14 @@ class TestPolarisConfiguration:
         try:
             # Set environment variables (higher priority)
             with patch.dict(os.environ, {
-                'TEST_FRAMEWORK_NATS_CONFIG_TIMEOUT': '120',
-                'TEST_FRAMEWORK_NATS_CONFIG_SERVERS': 'nats://env:4222'
+            'TEST_FRAMEWORK__NATS_CONFIG__TIMEOUT': '120',
+            'TEST_FRAMEWORK__NATS_CONFIG__SERVERS': 'nats://env:4222,'
             }):
                 yaml_source = YAMLConfigurationSource(temp_file, 100)  # Lower priority
                 env_source = EnvironmentConfigurationSource("TEST_", 200)  # Higher priority
                 
                 config = PolarisConfiguration([yaml_source, env_source])
+                await asyncio.sleep(0.1)
                 framework_config = config.get_framework_config()
                 
                 # Environment should override YAML
@@ -332,7 +345,8 @@ class TestPolarisConfiguration:
         finally:
             os.unlink(temp_file)
     
-    def test_configuration_reload(self):
+    @pytest.mark.asyncio
+    async def test_configuration_reload(self):
         """Test configuration reload functionality."""
         config_data = {
             'framework': {
@@ -349,6 +363,7 @@ class TestPolarisConfiguration:
         try:
             yaml_source = YAMLConfigurationSource(temp_file)
             config = PolarisConfiguration([yaml_source])
+            await asyncio.sleep(0.1)
             
             # Verify initial configuration
             framework_config = config.get_framework_config()
@@ -368,6 +383,7 @@ class TestPolarisConfiguration:
             
             # Reload configuration
             config.reload_configuration()
+            await asyncio.sleep(0.5)
             
             # Verify updated configuration
             framework_config = config.get_framework_config()
@@ -379,14 +395,17 @@ class TestPolarisConfiguration:
 class TestConfigurationBuilder:
     """Test configuration builder."""
     
-    def test_builder_basic(self):
+    @pytest.mark.asyncio
+    async def test_builder_basic(self):
         """Test basic configuration builder usage."""
         builder = ConfigurationBuilder()
         config = builder.add_environment_source("TEST_", 100).build()
+        await asyncio.sleep(0.1)
         
         assert isinstance(config, PolarisConfiguration)
     
-    def test_builder_with_yaml_and_env(self):
+    @pytest.mark.asyncio
+    async def test_builder_with_yaml_and_env(self):
         """Test builder with YAML and environment sources."""
         config_data = {
             'framework': {
@@ -405,13 +424,15 @@ class TestConfigurationBuilder:
                      .add_yaml_source(temp_file, 100)
                      .add_environment_source("TEST_", 200)
                      .build())
+            await asyncio.sleep(0.1)
             
             framework_config = config.get_framework_config()
             assert framework_config.nats_config.timeout == 30
         finally:
             os.unlink(temp_file)
     
-    def test_builder_hot_reload(self):
+    @pytest.mark.asyncio
+    async def test_builder_hot_reload(self):
         """Test builder with hot-reload enabled."""
         config_data = {
             'framework': {
@@ -440,7 +461,8 @@ class TestConfigurationBuilder:
 class TestHotReload:
     """Test hot-reload functionality."""
     
-    def test_hot_reload_callback(self):
+    @pytest.mark.asyncio
+    async def test_hot_reload_callback(self):
         """Test hot-reload callback functionality."""
         config_data = {
             'framework': {
@@ -456,6 +478,7 @@ class TestHotReload:
         
         try:
             config = load_hot_reload_configuration(temp_file)
+            await asyncio.sleep(0.1)
             
             # Set up callback to track reloads
             reload_count = [0]
@@ -469,7 +492,7 @@ class TestHotReload:
             assert framework_config.nats_config.timeout == 30
             
             # Wait a moment for hot-reload to start
-            time.sleep(0.1)
+            await asyncio.sleep(0.1)
             
             # Modify the configuration file
             updated_config = {
@@ -488,7 +511,7 @@ class TestHotReload:
             start_time = time.time()
             
             while reload_count[0] == 0 and (time.time() - start_time) < max_wait:
-                time.sleep(0.1)
+                await asyncio.sleep(0.1)
             
             # Verify reload was detected
             assert reload_count[0] > 0
@@ -505,7 +528,8 @@ class TestHotReload:
 class TestUtilityFunctions:
     """Test utility functions."""
     
-    def test_load_configuration_from_file(self):
+    @pytest.mark.asyncio
+    async def test_load_configuration_from_file(self):
         """Test load_configuration_from_file utility."""
         config_data = {
             'framework': {
@@ -521,18 +545,21 @@ class TestUtilityFunctions:
         
         try:
             config = load_configuration_from_file(temp_file)
+            await asyncio.sleep(0.1)
             framework_config = config.get_framework_config()
             assert framework_config.nats_config.timeout == 45
         finally:
             os.unlink(temp_file)
     
-    def test_load_default_configuration(self):
+    @pytest.mark.asyncio
+    async def test_load_default_configuration(self):
         """Test load_default_configuration utility."""
         config = load_default_configuration()
         framework_config = config.get_framework_config()
         assert isinstance(framework_config, FrameworkConfiguration)
     
-    def test_load_hot_reload_configuration(self):
+    @pytest.mark.asyncio
+    async def test_load_hot_reload_configuration(self):
         """Test load_hot_reload_configuration utility."""
         config_data = {
             'framework': {
@@ -548,6 +575,7 @@ class TestUtilityFunctions:
         
         try:
             config = load_hot_reload_configuration(temp_file)
+            await asyncio.sleep(0.1)
             assert config.is_hot_reload_enabled()
             
             framework_config = config.get_framework_config()

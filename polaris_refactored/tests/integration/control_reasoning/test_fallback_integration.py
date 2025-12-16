@@ -21,7 +21,12 @@ from infrastructure.llm.models import LLMConfiguration, LLMProvider
 from infrastructure.llm.exceptions import LLMAPIError, LLMTimeoutError
 from digital_twin.world_model import StatisticalWorldModel
 from digital_twin.knowledge_base import PolarisKnowledgeBase
-from infrastructure.data_storage import InMemoryDataStore
+from infrastructure.data_storage import (
+    PolarisDataStore, 
+    InMemoryGraphStorageBackend,
+    InMemoryTimeSeriesBackend, 
+    InMemoryDocumentBackend
+)
 from domain.models import MetricValue, SystemState, HealthStatus
 
 
@@ -35,7 +40,11 @@ async def test_fallback_integration():
     logger.info("Starting fallback integration test")
     
     # Create mock components
-    data_store = InMemoryDataStore()
+    data_store = PolarisDataStore({
+        "graph": InMemoryGraphStorageBackend(),
+        "time_series": InMemoryTimeSeriesBackend(),
+        "document": InMemoryDocumentBackend()
+    })
     await data_store.start()
     
     knowledge_base = PolarisKnowledgeBase(data_store)

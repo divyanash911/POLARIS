@@ -7,8 +7,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from polaris_refactored.src.domain.interfaces import ManagedSystemConnector
-from polaris_refactored.src.domain.models import (
+from domain.interfaces import ManagedSystemConnector
+from domain.models import (
     SystemState,
     HealthStatus,
     MetricValue,
@@ -16,8 +16,8 @@ from polaris_refactored.src.domain.models import (
     ExecutionResult,
     ExecutionStatus,
 )
-from polaris_refactored.src.framework.plugin_management import PolarisPluginRegistry
-from polaris_refactored.src.adapters.base_adapter import AdapterConfiguration
+from framework.plugin_management import PolarisPluginRegistry
+from adapters.base_adapter import AdapterConfiguration
 
 
 class MockConnector(ManagedSystemConnector):

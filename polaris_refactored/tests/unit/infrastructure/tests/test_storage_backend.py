@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 import pytest
 
-from polaris_refactored.src.infrastructure.data_storage.storage_backend import (
+from infrastructure.data_storage.storage_backend import (
     InMemoryGraphStorageBackend,
     _match_filters,
 )

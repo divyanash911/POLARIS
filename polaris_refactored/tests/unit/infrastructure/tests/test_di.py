@@ -1,6 +1,6 @@
 import pytest
 
-from polaris_refactored.src.infrastructure.di import DIContainer, Injectable
+from infrastructure.di import DIContainer, Injectable
 
 
 def test_singleton_and_transient_and_factory_with_deps():

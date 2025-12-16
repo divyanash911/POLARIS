@@ -14,10 +14,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 import uuid
 
-from ..domain.models import AdaptationAction, ExecutionResult, SystemState
-from ..domain.interfaces import AdaptationCommand, ManagedSystemConnector
-from ..infrastructure.di import Injectable
-from ..infrastructure.exceptions import PolarisException
+from domain.models import AdaptationAction, ExecutionResult, SystemState
+from domain.interfaces import AdaptationCommand, ManagedSystemConnector
+from infrastructure.di import Injectable
+from infrastructure.exceptions import PolarisException
 from .events import PolarisEventBus, ExecutionResultEvent, EventMetadata
 
 logger = logging.getLogger(__name__)

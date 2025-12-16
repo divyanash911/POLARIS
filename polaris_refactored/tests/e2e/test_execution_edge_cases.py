@@ -8,10 +8,10 @@ from typing import List
 
 import pytest
 
-from polaris_refactored.src.framework.events import PolarisEventBus, AdaptationEvent, ExecutionResultEvent
-from polaris_refactored.src.adapters.execution_adapter.execution_adapter import ExecutionAdapter
-from polaris_refactored.src.adapters.base_adapter import AdapterConfiguration
-from polaris_refactored.src.domain.models import AdaptationAction, ExecutionStatus
+from framework.events import PolarisEventBus, AdaptationEvent, ExecutionResultEvent
+from adapters.execution_adapter.execution_adapter import ExecutionAdapter
+from adapters.base_adapter import AdapterConfiguration
+from domain.models import AdaptationAction, ExecutionStatus
 
 import sys 
 from pathlib import Path

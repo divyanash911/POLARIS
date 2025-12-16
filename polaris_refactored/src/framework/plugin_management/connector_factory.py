@@ -8,9 +8,9 @@ import logging
 from typing import Dict, List, Optional, Any
 
 from .plugin_registry import PolarisPluginRegistry
-from ...domain.interfaces import ManagedSystemConnector
-from ...infrastructure.di import Injectable
-from ...infrastructure.exceptions import ConnectorError
+from domain.interfaces import ManagedSystemConnector
+from infrastructure.di import Injectable
+from infrastructure.exceptions import ConnectorError
 
 logger = logging.getLogger(__name__)
 

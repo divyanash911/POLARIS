@@ -1,10 +1,10 @@
 import asyncio
 import pytest
 
-from polaris_refactored.src.adapters.base_adapter import AdapterConfiguration
-from polaris_refactored.src.adapters.execution_adapter import ExecutionAdapter
-from polaris_refactored.src.domain.models import AdaptationAction, ExecutionStatus, ExecutionResult, SystemState, MetricValue, HealthStatus
-from polaris_refactored.src.framework.events import PolarisEventBus, ExecutionResultEvent
+from adapters.base_adapter import AdapterConfiguration
+from adapters.execution_adapter import ExecutionAdapter
+from domain.models import AdaptationAction, ExecutionStatus, ExecutionResult, SystemState, MetricValue, HealthStatus
+from framework.events import PolarisEventBus, ExecutionResultEvent
 
 # Minimal fake plugin registry compatible with ManagedSystemConnectorFactory
 class FakePluginRegistry:
@@ -25,7 +25,7 @@ class FakePluginRegistry:
 
 
 # Minimal connector implementing the interface
-from polaris_refactored.src.domain.interfaces import ManagedSystemConnector
+from domain.interfaces import ManagedSystemConnector
 from datetime import datetime, timezone
 
 

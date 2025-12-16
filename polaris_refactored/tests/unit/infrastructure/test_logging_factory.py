@@ -14,17 +14,17 @@ from flaky import flaky
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from polaris_refactored.src.infrastructure.observability.factory import (
+from infrastructure.observability.factory import (
     LoggerFactory, configure_logging, get_polaris_logger, is_logging_configured,
     get_logging_configuration, reset_logging, get_framework_logger,
     get_infrastructure_logger, get_adapter_logger, get_digital_twin_logger,
     get_control_logger, get_test_logger, TemporaryLoggingConfig
 )
-from polaris_refactored.src.infrastructure.observability.logging import (
+from infrastructure.observability.logging import (
     PolarisLogger, LogLevel
 )
 
-from polaris_refactored.src.framework.configuration.models import LoggingConfiguration
+from framework.configuration.models import LoggingConfiguration
 
 
 

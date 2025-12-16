@@ -7,16 +7,16 @@ from datetime import datetime, timezone, timedelta
 
 import pytest
 
-from polaris_refactored.src.framework.events import PolarisEventBus, TelemetryEvent, ExecutionResultEvent
-from polaris_refactored.src.control_reasoning.adaptive_controller import PolarisAdaptiveController
-from polaris_refactored.src.digital_twin.knowledge_base import PolarisKnowledgeBase
-from polaris_refactored.src.infrastructure.data_storage.data_store import PolarisDataStore
-from polaris_refactored.src.infrastructure.data_storage.storage_backend import InMemoryGraphStorageBackend
-from polaris_refactored.src.adapters.monitor_adapter.monitor_adapter import MonitorAdapter
-from polaris_refactored.src.adapters.monitor_adapter.monitor_types import MetricCollectionMode
-from polaris_refactored.src.adapters.execution_adapter.execution_adapter import ExecutionAdapter
-from polaris_refactored.src.adapters.base_adapter import AdapterConfiguration
-from polaris_refactored.src.domain.models import MetricValue, SystemState, HealthStatus
+from framework.events import PolarisEventBus, TelemetryEvent, ExecutionResultEvent
+from control_reasoning.adaptive_controller import PolarisAdaptiveController
+from digital_twin.knowledge_base import PolarisKnowledgeBase
+from infrastructure.data_storage.data_store import PolarisDataStore
+from infrastructure.data_storage.storage_backend import InMemoryGraphStorageBackend
+from adapters.monitor_adapter.monitor_adapter import MonitorAdapter
+from adapters.monitor_adapter.monitor_types import MetricCollectionMode
+from adapters.execution_adapter.execution_adapter import ExecutionAdapter
+from adapters.base_adapter import AdapterConfiguration
+from domain.models import MetricValue, SystemState, HealthStatus
 
 from polaris_refactored.tests.e2e.helpers import FullMockConnector, FakePluginRegistry, make_execution_adapter_config
 

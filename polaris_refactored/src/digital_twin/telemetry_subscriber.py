@@ -7,9 +7,9 @@ into the PolarisKnowledgeBase automatically with comprehensive observability.
 
 from typing import Optional
 
-from ..framework.events import TelemetryEvent, PolarisEventBus
-from ..domain.interfaces import EventHandler
-from ..infrastructure.observability import (
+from framework.events import TelemetryEvent, PolarisEventBus
+from domain.interfaces import EventHandler
+from infrastructure.observability import (
     observe_polaris_component, trace_telemetry_processing, get_logger,
     get_metrics_collector
 )

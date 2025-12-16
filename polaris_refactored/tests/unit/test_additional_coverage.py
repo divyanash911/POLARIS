@@ -2,27 +2,27 @@ import asyncio
 from datetime import datetime, timezone
 import pytest
 
-from polaris_refactored.src.infrastructure.data_storage import (
+from infrastructure.data_storage import (
     PolarisDataStore,
     InMemoryGraphStorageBackend,
 )
-from polaris_refactored.src.infrastructure.data_storage import (
+from infrastructure.data_storage import (
     SystemDependencyRepository,
     LearnedPatternRepository,
 )
-from polaris_refactored.src.digital_twin.knowledge_base import PolarisKnowledgeBase
-from polaris_refactored.src.digital_twin.telemetry_subscriber import (
+from digital_twin.knowledge_base import PolarisKnowledgeBase
+from digital_twin.telemetry_subscriber import (
     TelemetryToKnowledgeBaseHandler,
     subscribe_telemetry_persistence,
 )
-from polaris_refactored.src.framework.events import TelemetryEvent, PolarisEventBus
-from polaris_refactored.src.domain.models import (
+from framework.events import TelemetryEvent, PolarisEventBus
+from domain.models import (
     SystemState,
     MetricValue,
     HealthStatus,
     LearnedPattern,
 )
-from polaris_refactored.src.infrastructure.exceptions import DataStoreError
+from infrastructure.exceptions import DataStoreError
 
 
 @pytest.mark.asyncio
@@ -56,7 +56,7 @@ async def test_dependency_repo_neighbors_with_type_filter():
     repo: SystemDependencyRepository = ds.get_repository("system_dependencies")  # type: ignore[assignment]
 
     # Create mixed relationship types
-    from polaris_refactored.src.domain.models import SystemDependency
+    from domain.models import SystemDependency
     await repo.save(SystemDependency("A", "B", "depends_on", 1.0, {}))
     await repo.save(SystemDependency("A", "C", "replicates", 0.5, {}))
 

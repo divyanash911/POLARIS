@@ -10,13 +10,13 @@ import asyncio
 from unittest.mock import Mock, AsyncMock
 from datetime import datetime, timezone
 
-from polaris_refactored.src.control_reasoning.adaptive_controller import (
+from control_reasoning.adaptive_controller import (
     PolarisAdaptiveController, AdaptationNeed
 )
-from polaris_refactored.src.control_reasoning.pid_reactive_strategy import PIDReactiveStrategy
-from polaris_refactored.src.control_reasoning.pid_strategy_factory import PIDStrategyFactory
-from polaris_refactored.src.domain.models import SystemState, HealthStatus, MetricValue
-from polaris_refactored.src.framework.events import TelemetryEvent
+from control_reasoning.pid_reactive_strategy import PIDReactiveStrategy
+from control_reasoning.pid_strategy_factory import PIDStrategyFactory
+from domain.models import SystemState, HealthStatus, MetricValue
+from framework.events import TelemetryEvent
 
 
 class TestPIDIntegration:
@@ -30,7 +30,7 @@ class TestPIDIntegration:
         )
         
         # Verify PID strategy is in the strategies list
-        pid_strategies = [s for s in controller._control_strategies 
+        pid_strategies = [s for s in controller.control_strategies 
                          if isinstance(s, PIDReactiveStrategy)]
         assert len(pid_strategies) == 1
         
@@ -64,7 +64,7 @@ class TestPIDIntegration:
         )
         
         # Verify custom configuration is applied
-        pid_strategies = [s for s in controller._control_strategies 
+        pid_strategies = [s for s in controller.control_strategies 
                          if isinstance(s, PIDReactiveStrategy)]
         assert len(pid_strategies) == 1
         
@@ -134,10 +134,13 @@ class TestPIDIntegration:
         await controller.process_telemetry(telemetry)
         
         # Verify adaptation event was published
-        mock_event_bus.publish_adaptation_needed.assert_called_once()
+        # Verify adaptation event was published
+        mock_event_bus.publish.assert_called_once()
         
         # Get the published event
-        call_args = mock_event_bus.publish_adaptation_needed.call_args[0][0]
+        call_args = mock_event_bus.publish.call_args[0][0]
+        # Verify it's an AdaptationEvent
+        assert type(call_args).__name__ == "AdaptationEvent"
         assert call_args.system_id == "test_system"
         assert len(call_args.suggested_actions) > 0
         

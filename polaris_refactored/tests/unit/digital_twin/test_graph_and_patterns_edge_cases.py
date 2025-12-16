@@ -1,9 +1,9 @@
 import pytest
 from datetime import datetime, timezone
 
-from polaris_refactored.src.infrastructure.data_storage import InMemoryGraphStorageBackend, PolarisDataStore
-from polaris_refactored.src.digital_twin.knowledge_base import PolarisKnowledgeBase
-from polaris_refactored.src.domain.models import LearnedPattern
+from infrastructure.data_storage import InMemoryGraphStorageBackend, PolarisDataStore
+from digital_twin.knowledge_base import PolarisKnowledgeBase
+from domain.models import LearnedPattern
 
 
 @pytest.mark.asyncio

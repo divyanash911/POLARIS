@@ -2,17 +2,17 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 import pytest
 
-from polaris_refactored.src.infrastructure.data_storage.repository import (
+from infrastructure.data_storage.repository import (
     SystemStateRepository,
     AdaptationActionRepository,
     LearnedPatternRepository,
     ExecutionResultRepository,
 )
-from polaris_refactored.src.infrastructure.data_storage.storage_backend import (
+from infrastructure.data_storage.storage_backend import (
     InMemoryGraphStorageBackend,
 )
-from polaris_refactored.src.infrastructure.exceptions import DataStoreError
-from polaris_refactored.src.domain.models import (
+from infrastructure.exceptions import DataStoreError
+from domain.models import (
     MetricValue,
     SystemState,
     HealthStatus,

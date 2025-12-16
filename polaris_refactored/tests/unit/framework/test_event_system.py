@@ -10,11 +10,11 @@ import pytest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from polaris_refactored.src.framework.events import (
+from framework.events import (
     PolarisEvent, TelemetryEvent, AdaptationEvent, ExecutionResultEvent,
     EventSubscription, EventProcessingError, PolarisEventBus
 )
-from polaris_refactored.src.domain.models import SystemState, HealthStatus, MetricValue, AdaptationAction, ExecutionResult
+from domain.models import SystemState, HealthStatus, MetricValue, AdaptationAction, ExecutionResult
 
 @pytest.fixture
 def sample_system_state():

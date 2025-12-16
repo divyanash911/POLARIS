@@ -19,8 +19,8 @@ from dataclasses import dataclass
 from typing import Dict, Any, Optional, List, Deque
 from datetime import datetime, timezone
 
-from ..infrastructure.observability import get_logger, get_metrics_collector, get_tracer
-from ..domain.models import MetricValue
+from infrastructure.observability import get_logger, get_metrics_collector, get_tracer
+from domain.models import MetricValue
 
 
 @dataclass

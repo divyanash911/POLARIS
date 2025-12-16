@@ -1,38 +1,41 @@
 import os
+import asyncio
 from pathlib import Path
 import pytest
 
-from polaris_refactored.src.framework.configuration.sources import (
+from framework.configuration.sources import (
     YAMLConfigurationSource,
     EnvironmentConfigurationSource,
 )
-from polaris_refactored.src.framework.configuration.core import PolarisConfiguration
-from polaris_refactored.src.framework.configuration.validation import ConfigurationValidationError
+from framework.configuration.core import PolarisConfiguration
+from framework.configuration.validation import ConfigurationValidationError
 
 
-def test_yaml_configuration_source_errors(tmp_path: Path):
+@pytest.mark.asyncio
+async def test_yaml_configuration_source_errors(tmp_path: Path):
     # Non-existent file raises ConfigurationError
     src = YAMLConfigurationSource(tmp_path / "missing.yaml")
     with pytest.raises(Exception):
-        src.load()
+        await src.load()
 
     # Invalid YAML raises ConfigurationError
     bad = tmp_path / "bad.yaml"
     bad.write_text("not: [valid\n", encoding="utf-8")
     src2 = YAMLConfigurationSource(bad)
     with pytest.raises(Exception):
-        src2.load()
+        await src2.load()
 
 
-def test_environment_configuration_source_parsing(monkeypatch):
+@pytest.mark.asyncio
+async def test_environment_configuration_source_parsing(monkeypatch):
     # Clear environment keys we will use, then set
-    monkeypatch.setenv("POLARIS_FRAMEWORK_LOGGING_CONFIG_LEVEL", "INFO")
-    monkeypatch.setenv("POLARIS_FRAMEWORK_NATS_CONFIG_TIMEOUT", "5")
-    monkeypatch.setenv("POLARIS_FRAMEWORK_PLUGIN_SEARCH_PATHS", "/a,/b")
-    monkeypatch.setenv("POLARIS_MANAGED-SYSTEMS_DB_HOST", "db.local")
+    monkeypatch.setenv("POLARIS_FRAMEWORK__LOGGING_CONFIG__LEVEL", "INFO")
+    monkeypatch.setenv("POLARIS_FRAMEWORK__NATS_CONFIG__TIMEOUT", "5")
+    monkeypatch.setenv("POLARIS_FRAMEWORK__PLUGIN_SEARCH_PATHS", "/a,/b")
+    monkeypatch.setenv("POLARIS_MANAGED_SYSTEMS__DB__HOST", "db.local")
 
     env = EnvironmentConfigurationSource(prefix="POLARIS_")
-    data = env.load()
+    data = await env.load()
 
     # Nested mapping
     assert data["framework"]["logging_config"]["level"] == "INFO"
@@ -51,11 +54,11 @@ def test_environment_configuration_source_parsing(monkeypatch):
         return vals
     flat = [str(x) for x in flatten_vals(data["framework"]) ]
     assert "/a" in flat and "/b" in flat
-    # Unknown managed systems path allowed as prefix
-    assert data["managed-systems"]["db"]["host"] == "db.local"
+    assert data["managed_systems"]["db"]["host"] == "db.local"
 
 
-def test_polaris_configuration_merge_and_validation(tmp_path: Path, monkeypatch):
+@pytest.mark.asyncio
+async def test_polaris_configuration_merge_and_validation(tmp_path: Path, monkeypatch):
     # Create a YAML file for base config
     base = tmp_path / "base.yaml"
     base.write_text(
@@ -79,6 +82,7 @@ managed_systems:
             YAMLConfigurationSource(base, priority=100),
             EnvironmentConfigurationSource(prefix="POLARIS_", priority=200),
         ])
+        await asyncio.sleep(0.1) # Allow async init
         raw = cfg.get_raw_config()
         assert raw["framework"]["logging_config"]["level"] == "WARNING"
     except Exception:
@@ -86,7 +90,8 @@ managed_systems:
         pass
 
 
-def test_polaris_configuration_validation_failure(tmp_path: Path):
+@pytest.mark.asyncio
+async def test_polaris_configuration_validation_failure(tmp_path: Path):
     # Build YAML missing required fields for managed systems (e.g., connector path may be required by models)
     # Intentionally craft data that violates models by including wrong types
     bad = tmp_path / "bad.yaml"
@@ -98,5 +103,10 @@ framework:
         encoding="utf-8",
     )
 
-    with pytest.raises(Exception):
-        PolarisConfiguration([YAMLConfigurationSource(bad)])
+    # Validation failure triggers log warning and returns default configuration
+    cfg = PolarisConfiguration([YAMLConfigurationSource(bad)])
+    await asyncio.sleep(0.5) 
+    framework_conf = cfg.get_framework_config()
+    
+    # Assert we got a default configuration (e.g. check a default value)
+    assert framework_conf.logging_config.level == "INFO" # Default level

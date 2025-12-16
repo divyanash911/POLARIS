@@ -12,11 +12,11 @@ import logging
 from pathlib import Path
 
 
-from ..infrastructure.di import DIContainer, Injectable
-from ..infrastructure.exceptions import PolarisException, ConfigurationError
-from ..infrastructure.message_bus import PolarisMessageBus
-from ..infrastructure.data_storage import PolarisDataStore
-from ..infrastructure.observability import (
+from infrastructure.di import DIContainer, Injectable
+from infrastructure.exceptions import PolarisException, ConfigurationError
+from infrastructure.message_bus import PolarisMessageBus
+from infrastructure.data_storage import PolarisDataStore
+from infrastructure.observability import (
     ObservabilityConfig, ObservabilityManager, get_logger, 
     initialize_observability, shutdown_observability, observe_polaris_component,
     configure_logging, get_framework_logger
@@ -90,7 +90,7 @@ class PolarisFramework(Injectable):
                 configure_logging(framework_config.logging_config)
                 
                 # Configure POLARIS structured logging system
-                from ..infrastructure.observability.factory import configure_logging as configure_polaris_logging
+                from infrastructure.observability.factory import configure_logging as configure_polaris_logging
                 configure_polaris_logging(framework_config.logging_config)
                 
                 # Now we can safely use the logger
@@ -263,10 +263,10 @@ class PolarisFramework(Injectable):
         
         # Create and register digital twin components
         try:
-            from ..digital_twin import PolarisWorldModel, PolarisKnowledgeBase, PolarisLearningEngine
-            from ..digital_twin.world_model import StatisticalWorldModel
-            from ..digital_twin.telemetry_subscriber import subscribe_telemetry_persistence
-            from ..infrastructure.data_storage import DataStoreFactory
+            from digital_twin import PolarisWorldModel, PolarisKnowledgeBase, PolarisLearningEngine
+            from digital_twin.world_model import StatisticalWorldModel
+            from digital_twin.telemetry_subscriber import subscribe_telemetry_persistence
+            from infrastructure.data_storage import DataStoreFactory
             
             # Create knowledge base with data store
             knowledge_base = PolarisKnowledgeBase(self.data_store)
@@ -330,9 +330,9 @@ class PolarisFramework(Injectable):
         self.logger.debug("Starting control and reasoning layer...")
         
         try:
-            from ..control_reasoning import PolarisAdaptiveController, PolarisReasoningEngine
-            from ..control_reasoning import ThresholdReactiveStrategy
-            from ..digital_twin import PolarisWorldModel, PolarisKnowledgeBase
+            from control_reasoning import PolarisAdaptiveController, PolarisReasoningEngine
+            from control_reasoning import ThresholdReactiveStrategy
+            from digital_twin import PolarisWorldModel, PolarisKnowledgeBase
             
             # Get components from DI container
             knowledge_base = self.container.resolve(PolarisKnowledgeBase)
@@ -403,8 +403,8 @@ class PolarisFramework(Injectable):
     async def _start_monitoring_adapters(self) -> None:
         """Create and start monitoring adapters for configured managed systems."""
         try:
-            from ..adapters.monitor_adapter import MonitorAdapter, MonitoringTarget
-            from ..adapters.base_adapter import AdapterConfiguration
+            from adapters.monitor_adapter import MonitorAdapter, MonitoringTarget
+            from adapters.base_adapter import AdapterConfiguration
             
             # Get all managed system configurations
             managed_systems = self.configuration.get_all_managed_systems()
@@ -542,7 +542,7 @@ class PolarisFramework(Injectable):
     def _create_threshold_strategy(self):
         """Create and configure ThresholdReactiveStrategy from configuration."""
         try:
-            from ..control_reasoning.threshold_reactive_strategy import (
+            from control_reasoning.threshold_reactive_strategy import (
                 ThresholdReactiveStrategy, ThresholdReactiveConfig, ThresholdRule, 
                 ThresholdCondition, ThresholdOperator, LogicalOperator
             )
@@ -646,7 +646,7 @@ class PolarisFramework(Injectable):
                         self.logger.info("Added threshold reactive strategy")
                         
                     elif strategy_name == "agentic_llm_reasoning":
-                        from ..control_reasoning.llm_control_strategy import LLMControlStrategy
+                        from control_reasoning.llm_control_strategy import LLMControlStrategy
                         strategy = LLMControlStrategy(reasoning_engine=reasoning_engine)
                         strategies.append(strategy)
                         self.logger.info("Added LLM control strategy")
@@ -672,7 +672,7 @@ class PolarisFramework(Injectable):
     def _create_reasoning_engine(self, knowledge_base, world_model):
         """Create reasoning engine with appropriate strategies."""
         try:
-            from ..control_reasoning.reasoning_engine import (
+            from control_reasoning.reasoning_engine import (
                 PolarisReasoningEngine, StatisticalReasoningStrategy, 
                 CausalReasoningStrategy, ExperienceBasedReasoningStrategy
             )
@@ -690,8 +690,8 @@ class PolarisFramework(Injectable):
                 llm_config = raw_config.get("llm", {})
                 
                 if llm_config.get("provider") != "mock":
-                    from ..control_reasoning.agentic_llm_reasoning_strategy import AgenticLLMReasoningStrategy
-                    from ..infrastructure.llm.client import LLMClient
+                    from control_reasoning.agentic_llm_reasoning_strategy import AgenticLLMReasoningStrategy
+                    from infrastructure.llm.client import LLMClient
                     
                     # Create LLM client
                     llm_client = LLMClient(llm_config)
@@ -721,7 +721,7 @@ class PolarisFramework(Injectable):
         except Exception as e:
             self.logger.error(f"Error creating reasoning engine: {e}")
             # Fallback to basic reasoning engine
-            from ..control_reasoning.reasoning_engine import PolarisReasoningEngine
+            from control_reasoning.reasoning_engine import PolarisReasoningEngine
             return PolarisReasoningEngine(knowledge_base=knowledge_base)
     
     async def _stop_adapters(self) -> None:

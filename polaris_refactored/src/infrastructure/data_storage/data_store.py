@@ -12,8 +12,8 @@ storage in Polaris.
 from typing import Dict, List, Any, TypeVar, AsyncContextManager, Optional
 from contextlib import asynccontextmanager
 
-from ..exceptions import DataStoreError
-from ..di import Injectable
+from infrastructure.exceptions import DataStoreError
+from infrastructure.di import Injectable
 
 from .repository import (
     Repository, AdaptationActionRepository,

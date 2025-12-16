@@ -9,8 +9,8 @@ import pytest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
-from polaris_refactored.src.adapters.base_adapter import AdapterConfiguration
-from polaris_refactored.src.adapters.execution_adapter import (
+from adapters.base_adapter import AdapterConfiguration
+from adapters.execution_adapter import (
     ExecutionAdapter, 
     ValidationStage,
     PreConditionCheckStage,
@@ -18,7 +18,7 @@ from polaris_refactored.src.adapters.execution_adapter import (
     PostExecutionVerificationStage,
     ActionExecutionPipeline
 )
-from polaris_refactored.src.domain.models import (
+from domain.models import (
     AdaptationAction, 
     ExecutionStatus, 
     ExecutionResult, 
@@ -26,8 +26,8 @@ from polaris_refactored.src.domain.models import (
     MetricValue,
     HealthStatus
 )
-from polaris_refactored.src.framework.events import PolarisEventBus, ExecutionResultEvent
-from polaris_refactored.src.domain.interfaces import ManagedSystemConnector
+from framework.events import PolarisEventBus, ExecutionResultEvent
+from domain.interfaces import ManagedSystemConnector
 
 class FailingConnector(ManagedSystemConnector):
     """A connector that fails in various ways for testing error handling."""

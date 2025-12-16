@@ -1,9 +1,9 @@
 import pytest
 from datetime import datetime, timezone
-from polaris_refactored.src.infrastructure.data_storage.data_store import PolarisDataStore
-from polaris_refactored.src.infrastructure.exceptions import DataStoreError
-from polaris_refactored.src.infrastructure.data_storage import InMemoryGraphStorageBackend
-from polaris_refactored.src.domain.models import SystemState, MetricValue, HealthStatus, AdaptationAction
+from infrastructure.data_storage.data_store import PolarisDataStore
+from infrastructure.exceptions import DataStoreError
+from infrastructure.data_storage import InMemoryGraphStorageBackend
+from domain.models import SystemState, MetricValue, HealthStatus, AdaptationAction
 
 
 @pytest.mark.asyncio

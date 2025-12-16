@@ -1,7 +1,7 @@
 import asyncio
 import pytest
 
-from polaris_refactored.src.framework.events import (
+from framework.events import (
     PolarisEventBus,
     PolarisEvent,
     EventMetadata,

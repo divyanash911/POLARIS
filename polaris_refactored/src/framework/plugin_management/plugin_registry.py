@@ -12,10 +12,10 @@ from typing import Dict, List, Optional, Any
 
 from .plugin_descriptor import PluginDescriptor
 from .plugin_discovery import PluginDiscovery
-from ...domain.interfaces import ManagedSystemConnector
-from ...infrastructure.di import Injectable
-from ...infrastructure.exceptions import ConnectorError
-from ...infrastructure.observability import get_framework_logger
+from domain.interfaces import ManagedSystemConnector
+from infrastructure.di import Injectable
+from infrastructure.exceptions import ConnectorError
+from infrastructure.observability import get_framework_logger
 
 
 class PolarisPluginRegistry(Injectable):

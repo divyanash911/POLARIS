@@ -11,9 +11,9 @@ import pytest
 from datetime import datetime, timezone
 from unittest.mock import Mock, AsyncMock
 
-from ..domain.models import SystemState, MetricValue, HealthStatus, AdaptationAction
-from ..framework.events import TelemetryEvent
-from ..infrastructure.llm import MockLLMClient, LLMConfiguration, LLMProvider, LLMResponse
+from domain.models import SystemState, MetricValue, HealthStatus, AdaptationAction
+from framework.events import TelemetryEvent
+from infrastructure.llm import MockLLMClient, LLMConfiguration, LLMProvider, LLMResponse
 from .llm_world_model import LLMWorldModel, SystemStateNarrator
 from .world_model import PredictionResult, SimulationResult
 

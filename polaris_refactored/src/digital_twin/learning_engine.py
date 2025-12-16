@@ -17,9 +17,9 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
 import uuid
 
-from ..domain.models import ExecutionResult, LearnedPattern
-from ..infrastructure.di import Injectable
-from ..infrastructure.observability.factory import get_digital_twin_logger
+from domain.models import ExecutionResult, LearnedPattern
+from infrastructure.di import Injectable
+from infrastructure.observability.factory import get_digital_twin_logger
 from .knowledge_base import PolarisKnowledgeBase
 from .world_model import PolarisWorldModel
 

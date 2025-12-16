@@ -8,8 +8,8 @@ This bridges the gap between the reasoning engine and the adaptive controller.
 import time
 from typing import List, Dict, Any, Optional
 
-from ..domain.models import AdaptationAction
-from ..infrastructure.observability import get_logger, get_metrics_collector, trace_adaptation_flow
+from domain.models import AdaptationAction
+from infrastructure.observability import get_logger, get_metrics_collector, trace_adaptation_flow
 from .adaptive_controller import ControlStrategy, AdaptationNeed
 from .reasoning_engine import PolarisReasoningEngine, ReasoningContext
 

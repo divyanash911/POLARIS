@@ -11,21 +11,21 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 
 from .reasoning_engine import ReasoningStrategy, ReasoningContext, ReasoningResult
-from ..infrastructure.llm.client import LLMClient
-from ..infrastructure.llm.models import (
+from infrastructure.llm.client import LLMClient
+from infrastructure.llm.models import (
     LLMRequest, Message, MessageRole, AgenticConversation, ToolCall
 )
-from ..infrastructure.llm.tool_registry import ToolRegistry
-from ..infrastructure.llm.conversation_manager import ConversationManager
-from ..infrastructure.llm.prompt_manager import PromptManager
-from ..infrastructure.llm.exceptions import LLMAPIError, LLMToolError
-from ..infrastructure.observability import (
+from infrastructure.llm.tool_registry import ToolRegistry
+from infrastructure.llm.conversation_manager import ConversationManager
+from infrastructure.llm.prompt_manager import PromptManager
+from infrastructure.llm.exceptions import LLMAPIError, LLMToolError
+from infrastructure.observability import (
     get_logger, get_metrics_collector, get_tracer, observe_polaris_component,
     trace_adaptation_flow
 )
 from .agentic_tools import create_agentic_tool_registry
-from ..digital_twin.world_model import PolarisWorldModel
-from ..digital_twin.knowledge_base import PolarisKnowledgeBase
+from digital_twin.world_model import PolarisWorldModel
+from digital_twin.knowledge_base import PolarisKnowledgeBase
 
 
 @observe_polaris_component("agentic_llm_reasoning", auto_trace=True, auto_metrics=True)

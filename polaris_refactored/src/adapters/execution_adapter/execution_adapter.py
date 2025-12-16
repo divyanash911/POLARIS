@@ -18,11 +18,11 @@ import logging
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 
-from ...domain.models import AdaptationAction, ExecutionResult, ExecutionStatus, SystemState
-from ...domain.interfaces import ManagedSystemConnector
-from ...framework.events import PolarisEventBus, ExecutionResultEvent, EventMetadata, AdaptationEvent
-from ...framework.plugin_management import PolarisPluginRegistry, ManagedSystemConnectorFactory
-from ..base_adapter import (
+from domain.models import AdaptationAction, ExecutionResult, ExecutionStatus, SystemState
+from domain.interfaces import ManagedSystemConnector
+from framework.events import PolarisEventBus, ExecutionResultEvent, EventMetadata, AdaptationEvent
+from framework.plugin_management import PolarisPluginRegistry, ManagedSystemConnectorFactory
+from adapters.base_adapter import (
     PolarisAdapter,
     AdapterConfiguration,
     AdapterValidationError,

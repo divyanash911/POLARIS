@@ -23,7 +23,7 @@ from .exceptions import (
     LLMAPIError, LLMTimeoutError, LLMRateLimitError, 
     LLMConfigurationError, LLMResponseParsingError
 )
-from ..observability import get_tracer, get_metrics_collector, get_logger
+from infrastructure.observability import get_tracer, get_metrics_collector, get_logger
 
 
 class LLMClient(ABC):

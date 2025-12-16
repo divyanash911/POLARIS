@@ -12,8 +12,8 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Any, Optional, TypeVar, Generic
 from datetime import datetime, timezone
 
-from ...domain.models import SystemState, AdaptationAction, SystemDependency, LearnedPattern, ExecutionResult
-from ..exceptions import DataStoreError
+from domain.models import SystemState, AdaptationAction, SystemDependency, LearnedPattern, ExecutionResult
+from infrastructure.exceptions import DataStoreError
 
 from .storage_backend import StorageBackend, GraphStorageBackend
 
@@ -159,7 +159,7 @@ class SystemStateRepository(Repository[SystemState]):
     
     def _dict_to_entity(self, data: Dict[str, Any]) -> SystemState:
         """Convert dictionary to SystemState."""
-        from ...domain.models import MetricValue, HealthStatus
+        from domain.models import MetricValue, HealthStatus
         
         metrics = {}
         for k, v in data["metrics"].items():
@@ -514,7 +514,7 @@ class ExecutionResultRepository(Repository[ExecutionResult]):
         }
 
     def _dict_to_entity(self, data: Dict[str, Any]) -> ExecutionResult:
-        from ...domain.models import ExecutionStatus
+        from domain.models import ExecutionStatus
         return ExecutionResult(
             action_id=data["action_id"],
             status=ExecutionStatus(data["status"]) if data.get("status") in ExecutionStatus._value2member_map_ else ExecutionStatus.FAILED,

@@ -16,7 +16,7 @@ from .logging import (
 
 # Use TYPE_CHECKING to avoid circular imports
 if TYPE_CHECKING:
-    from ...framework.configuration.models import LoggingConfiguration
+    from framework.configuration.models import LoggingConfiguration
 
 
 class LoggerFactory:

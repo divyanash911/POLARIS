@@ -6,7 +6,7 @@ import os
 from typing import Dict, Any, List
 from pydantic import ValidationError
 
-from ...infrastructure.exceptions import ConfigurationError
+from infrastructure.exceptions import ConfigurationError
 from .models import FrameworkConfiguration, ManagedSystemConfiguration
 
 

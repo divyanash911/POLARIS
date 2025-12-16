@@ -8,7 +8,7 @@ PID reactive strategies within the POLARIS adaptive controller.
 from typing import Dict, Any, List, Optional
 from .pid_reactive_strategy import PIDReactiveStrategy, PIDReactiveConfig
 from .pid_controller import PIDConfig
-from ..infrastructure.observability import get_logger
+from infrastructure.observability import get_logger
 
 
 class PIDStrategyFactory:

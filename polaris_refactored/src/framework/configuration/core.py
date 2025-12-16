@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 from .sources import ConfigurationSource
 from .models import FrameworkConfiguration, ManagedSystemConfiguration
-from ...infrastructure.exceptions import ConfigurationError
+from infrastructure.exceptions import ConfigurationError
 
 
 class PolarisConfiguration:
@@ -129,7 +129,18 @@ class PolarisConfiguration:
     
     def reload_configuration(self) -> None:
         """Manually reload configuration."""
-        asyncio.create_task(self._load_configuration())
+        async def _reload_with_callbacks():
+            await self._load_configuration()
+            for callback in self._reload_callbacks:
+                try:
+                    if asyncio.iscoroutinefunction(callback):
+                        await callback()
+                    else:
+                        callback()
+                except Exception as e:
+                    print(f"Error in reload callback: {e}")
+
+        asyncio.create_task(_reload_with_callbacks())
     
     def is_hot_reload_enabled(self) -> bool:
         """Check if hot reload is enabled."""

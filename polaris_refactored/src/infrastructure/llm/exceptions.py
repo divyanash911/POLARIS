@@ -6,7 +6,7 @@ for comprehensive error handling and diagnostics.
 """
 
 from typing import Dict, Any, Optional, List
-from ..exceptions import PolarisException
+from infrastructure.exceptions import PolarisException
 
 
 class LLMIntegrationError(PolarisException):

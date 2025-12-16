@@ -3,9 +3,9 @@ from pathlib import Path
 import textwrap
 import pytest
 
-from polaris_refactored.src.framework.plugin_management.plugin_registry import PolarisPluginRegistry
-from polaris_refactored.src.framework.plugin_management.plugin_discovery import PluginDiscovery
-from polaris_refactored.src.framework.plugin_management.plugin_descriptor import PluginDescriptor
+from framework.plugin_management.plugin_registry import PolarisPluginRegistry
+from framework.plugin_management.plugin_discovery import PluginDiscovery
+from framework.plugin_management.plugin_descriptor import PluginDescriptor
 
 
 PLUGIN_YAML = """
@@ -19,8 +19,8 @@ module: connector
 CONNECTOR_PY = textwrap.dedent(
     """
     import asyncio
-    from polaris_refactored.src.domain.interfaces import ManagedSystemConnector
-    from polaris_refactored.src.domain.models import SystemState, MetricValue, ExecutionResult, ExecutionStatus, HealthStatus
+    from domain.interfaces import ManagedSystemConnector
+    from domain.models import SystemState, MetricValue, ExecutionResult, ExecutionStatus, HealthStatus
     from datetime import datetime, timezone
 
     class TestConnector(ManagedSystemConnector):

@@ -22,8 +22,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from .adaptive_controller import ReactiveControlStrategy, AdaptationNeed
-from ..domain.models import AdaptationAction, MetricValue
-from ..infrastructure.observability import (
+from domain.models import AdaptationAction, MetricValue
+from infrastructure.observability import (
     get_logger, get_metrics_collector, get_tracer, observe_polaris_component,
     trace_adaptation_flow
 )

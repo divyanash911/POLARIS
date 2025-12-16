@@ -12,7 +12,7 @@ import json
 from datetime import datetime, timezone
 from unittest.mock import Mock, AsyncMock, patch
 
-from polaris_refactored.src.infrastructure.llm import (
+from infrastructure.llm import (
     LLMClient, MockLLMClient, OpenAIClient, AnthropicClient,
     PromptManager, ResponseParser, ToolRegistry, ConversationManager,
     LLMCache, BaseTool, ToolSchema, ToolResult,
@@ -233,7 +233,7 @@ class TestToolSystem:
     @pytest.fixture
     def tool_registry(self):
         """Create tool registry with default tools."""
-        from polaris_refactored.src.infrastructure.llm.tool_registry import create_default_registry
+        from infrastructure.llm.tool_registry import create_default_registry
         return create_default_registry()
     
     def test_tool_registration(self, tool_registry):
@@ -308,7 +308,7 @@ class TestConversationManager:
     def conversation_manager(self):
         """Create conversation manager with mocks."""
         mock_client = MockLLMClient()
-        from polaris_refactored.src.infrastructure.llm.tool_registry import create_default_registry
+        from infrastructure.llm.tool_registry import create_default_registry
         tool_registry = create_default_registry()
         response_parser = ResponseParser()
         
@@ -459,7 +459,7 @@ class TestIntegration:
         client = MockLLMClient(config)
         prompt_manager = PromptManager()
         response_parser = ResponseParser()
-        from polaris_refactored.src.infrastructure.llm.tool_registry import create_default_registry
+        from infrastructure.llm.tool_registry import create_default_registry
         tool_registry = create_default_registry()
         conversation_manager = ConversationManager(client, tool_registry, response_parser)
         cache = LLMCache()

@@ -1,14 +1,14 @@
 import pytest
 from datetime import datetime, timedelta, timezone
 
-from polaris_refactored.src.control_reasoning.reasoning_engine import (
+from control_reasoning.reasoning_engine import (
     PolarisReasoningEngine,
     ReasoningContext,
     StatisticalReasoningStrategy,
     CausalReasoningStrategy,
     ExperienceBasedReasoningStrategy,
 )
-from polaris_refactored.src.domain.models import MetricValue, HealthStatus, SystemState
+from domain.models import MetricValue, HealthStatus, SystemState
 
 
 class MockKB:

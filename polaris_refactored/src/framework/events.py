@@ -14,10 +14,10 @@ from collections import defaultdict
 import uuid
 import weakref
 
-from ..domain.models import SystemState, AdaptationAction, ExecutionResult
-from ..domain.interfaces import EventHandler
-from ..infrastructure.di import Injectable
-from ..infrastructure.observability.factory import get_framework_logger
+from domain.models import SystemState, AdaptationAction, ExecutionResult
+from domain.interfaces import EventHandler
+from infrastructure.di import Injectable
+from infrastructure.observability.factory import get_framework_logger
 
 
 @dataclass

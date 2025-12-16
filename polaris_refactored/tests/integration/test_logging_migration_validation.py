@@ -10,7 +10,7 @@ import pytest
 import asyncio
 from unittest.mock import Mock, patch
 
-from polaris_refactored.src.infrastructure.observability.factory import (
+from infrastructure.observability.factory import (
     configure_logging, get_polaris_logger, reset_logging, LoggerFactory
 )
 from polaris_refactored.tests.fixtures.logging_fixtures import (
@@ -23,7 +23,7 @@ class TestFrameworkComponentLogging:
     
     def test_plugin_registry_logging(self, integration_logging_setup, capture_logs):
         """Test that plugin registry uses POLARIS logging."""
-        from polaris_refactored.src.framework.plugin_management.plugin_registry import PolarisPluginRegistry
+        from framework.plugin_management.plugin_registry import PolarisPluginRegistry
         
         registry = PolarisPluginRegistry()
         
@@ -45,7 +45,7 @@ class TestFrameworkComponentLogging:
     
     def test_event_bus_logging(self, integration_logging_setup, capture_logs):
         """Test that event bus uses POLARIS logging."""
-        from polaris_refactored.src.framework.events import PolarisEventBus
+        from framework.events import PolarisEventBus
         
         event_bus = PolarisEventBus()
         
@@ -67,7 +67,7 @@ class TestFrameworkComponentLogging:
     
     def test_configuration_system_logging(self, integration_logging_setup, capture_logs):
         """Test that configuration system uses POLARIS logging."""
-        from polaris_refactored.src.framework.configuration.core import PolarisConfiguration
+        from framework.configuration.core import PolarisConfiguration
         
         config = PolarisConfiguration()
         
@@ -93,8 +93,8 @@ class TestDigitalTwinComponentLogging:
     
     def test_knowledge_base_logging(self, integration_logging_setup, capture_logs):
         """Test that knowledge base uses POLARIS logging."""
-        from polaris_refactored.src.digital_twin.knowledge_base import PolarisKnowledgeBase
-        from polaris_refactored.src.infrastructure.data_storage import PolarisDataStore
+        from digital_twin.knowledge_base import PolarisKnowledgeBase
+        from infrastructure.data_storage import PolarisDataStore
         
         # Mock data store
         mock_data_store = Mock(spec=PolarisDataStore)
@@ -119,7 +119,7 @@ class TestDigitalTwinComponentLogging:
     
     def test_learning_engine_logging(self, integration_logging_setup, capture_logs):
         """Test that learning engine uses POLARIS logging."""
-        from polaris_refactored.src.digital_twin.learning_engine import PolarisLearningEngine
+        from digital_twin.learning_engine import PolarisLearningEngine
         
         engine = PolarisLearningEngine()
         
@@ -141,7 +141,7 @@ class TestDigitalTwinComponentLogging:
     
     def test_world_model_logging(self, integration_logging_setup):
         """Test that world model components use POLARIS logging."""
-        from polaris_refactored.src.digital_twin.world_model import (
+        from digital_twin.world_model import (
             CompositeWorldModel, StatisticalWorldModel, MLWorldModel
         )
         
@@ -166,7 +166,7 @@ class TestControlReasoningComponentLogging:
     
     def test_reasoning_engine_logging(self, integration_logging_setup, capture_logs):
         """Test that reasoning engine uses POLARIS logging."""
-        from polaris_refactored.src.control_reasoning.reasoning_engine import PolarisReasoningEngine
+        from control_reasoning.reasoning_engine import PolarisReasoningEngine
         
         engine = PolarisReasoningEngine()
         
@@ -211,7 +211,7 @@ class TestLoggingConsistency:
             
             # Create instance (with mocks if needed)
             if class_name == "PolarisKnowledgeBase":
-                from polaris_refactored.src.infrastructure.data_storage import PolarisDataStore
+                from infrastructure.data_storage import PolarisDataStore
                 mock_data_store = Mock(spec=PolarisDataStore)
                 instance = component_class(mock_data_store)
             else:
@@ -224,8 +224,8 @@ class TestLoggingConsistency:
     
     def test_logging_context_propagation(self, integration_logging_setup, capture_logs):
         """Test that logging context propagates correctly across components."""
-        from polaris_refactored.src.framework.events import PolarisEventBus
-        from polaris_refactored.src.digital_twin.learning_engine import PolarisLearningEngine
+        from framework.events import PolarisEventBus
+        from digital_twin.learning_engine import PolarisLearningEngine
         
         event_bus = PolarisEventBus()
         learning_engine = PolarisLearningEngine()
@@ -254,9 +254,9 @@ class TestLoggingConsistency:
     
     def test_structured_logging_consistency(self, integration_logging_setup, capture_logs):
         """Test that all components use structured logging consistently."""
-        from polaris_refactored.src.framework.events import PolarisEventBus
-        from polaris_refactored.src.digital_twin.learning_engine import PolarisLearningEngine
-        from polaris_refactored.src.control_reasoning.reasoning_engine import PolarisReasoningEngine
+        from framework.events import PolarisEventBus
+        from digital_twin.learning_engine import PolarisLearningEngine
+        from control_reasoning.reasoning_engine import PolarisReasoningEngine
         
         components = [
             PolarisEventBus(),
@@ -291,8 +291,8 @@ class TestLoggingConsistency:
     
     def test_error_logging_consistency(self, integration_logging_setup, capture_logs):
         """Test that error logging is consistent across components."""
-        from polaris_refactored.src.framework.events import PolarisEventBus
-        from polaris_refactored.src.digital_twin.learning_engine import PolarisLearningEngine
+        from framework.events import PolarisEventBus
+        from digital_twin.learning_engine import PolarisLearningEngine
         
         components = [
             PolarisEventBus(),
@@ -333,7 +333,7 @@ class TestLoggingPerformance:
     def test_logging_performance_impact(self, integration_logging_setup, capture_logs):
         """Test that logging migration doesn't significantly impact performance."""
         import time
-        from polaris_refactored.src.framework.events import PolarisEventBus
+        from framework.events import PolarisEventBus
         
         event_bus = PolarisEventBus()
         

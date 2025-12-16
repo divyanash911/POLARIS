@@ -8,10 +8,10 @@ import pytest
 import asyncio
 from datetime import datetime, timezone
 
-from polaris_refactored.src.infrastructure.di import DIContainer, Injectable, inject
-from polaris_refactored.src.infrastructure.exceptions import PolarisException, ConfigurationError
-from polaris_refactored.src.domain.models import SystemState, MetricValue, HealthStatus
-from polaris_refactored.src.framework import PolarisFramework
+from infrastructure.di import DIContainer, Injectable, inject
+from infrastructure.exceptions import PolarisException, ConfigurationError
+from domain.models import SystemState, MetricValue, HealthStatus
+from framework import PolarisFramework
 
 
 class TestDependencyInjection:
@@ -190,23 +190,24 @@ class TestLayeredArchitecture:
     def test_layer_imports(self):
         """Test that all layers can be imported."""
         # Framework layer
-        from polaris_refactored.src.framework import PolarisFramework
-        from polaris_refactored.src.framework.configuration import PolarisConfiguration
+        from framework import PolarisFramework
+        from framework.configuration import PolarisConfiguration
         
         # Infrastructure layer
-        from polaris_refactored.src.infrastructure import DIContainer, PolarisException
+        from infrastructure.di import DIContainer
+        from infrastructure.exceptions import PolarisException
         
         # Domain layer
-        from polaris_refactored.src.domain import SystemState, AdaptationAction
+        from domain import SystemState, AdaptationAction
         
         # Adapter layer
-        from polaris_refactored.src.adapters import PolarisAdapter
+        from adapters import PolarisAdapter
         
         # Digital Twin layer
-        from polaris_refactored.src.digital_twin import PolarisWorldModel
+        from digital_twin import PolarisWorldModel
         
         # Control & Reasoning layer
-        from polaris_refactored.src.control_reasoning import PolarisAdaptiveController
+        from control_reasoning import PolarisAdaptiveController
         
         # All imports should succeed
         assert True

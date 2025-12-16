@@ -18,13 +18,13 @@ import logging
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
 
-from ..domain.models import SystemState, MetricValue
-from ..framework.events import TelemetryEvent
-from ..infrastructure.llm import (
+from domain.models import SystemState, MetricValue
+from framework.events import TelemetryEvent
+from infrastructure.llm import (
     LLMClient, ConversationManager, PromptManager, ResponseParser,
     Message, MessageRole, LLMRequest, AgenticConversation
 )
-from ..infrastructure.observability import (
+from infrastructure.observability import (
     get_logger, get_metrics_collector, get_tracer, observe_polaris_component,
     trace_world_model_operation
 )

@@ -12,19 +12,19 @@ from typing import Dict, Any, List, Optional
 
 import pytest
 
-from polaris_refactored.src.framework.events import (
+from framework.events import (
     PolarisEventBus,
     TelemetryEvent,
     EventMetadata,
     AdaptationEvent,
     ExecutionResultEvent,
 )
-from polaris_refactored.src.adapters.base_adapter import AdapterConfiguration
-from polaris_refactored.src.adapters.execution_adapter.execution_adapter import ExecutionAdapter
-from polaris_refactored.src.adapters.monitor_adapter.monitor_adapter import MonitorAdapter
-from polaris_refactored.src.adapters.monitor_adapter.monitor_types import MonitoringTarget, MetricCollectionMode
-from polaris_refactored.src.control_reasoning.adaptive_controller import PolarisAdaptiveController
-from polaris_refactored.src.domain.models import (
+from adapters.base_adapter import AdapterConfiguration
+from adapters.execution_adapter.execution_adapter import ExecutionAdapter
+from adapters.monitor_adapter.monitor_adapter import MonitorAdapter
+from adapters.monitor_adapter.monitor_types import MonitoringTarget, MetricCollectionMode
+from control_reasoning.adaptive_controller import PolarisAdaptiveController
+from domain.models import (
     SystemState,
     HealthStatus,
     MetricValue,
@@ -32,12 +32,12 @@ from polaris_refactored.src.domain.models import (
     ExecutionResult,
     ExecutionStatus,
 )
-from polaris_refactored.src.domain.interfaces import ManagedSystemConnector
-from polaris_refactored.src.framework.plugin_management import PolarisPluginRegistry, ManagedSystemConnectorFactory
-from polaris_refactored.src.infrastructure.data_storage.data_store import PolarisDataStore
-from polaris_refactored.src.infrastructure.data_storage.storage_backend import InMemoryGraphStorageBackend
-from polaris_refactored.src.digital_twin.knowledge_base import PolarisKnowledgeBase
-from polaris_refactored.src.digital_twin.telemetry_subscriber import subscribe_telemetry_persistence
+from domain.interfaces import ManagedSystemConnector
+from framework.plugin_management import PolarisPluginRegistry, ManagedSystemConnectorFactory
+from infrastructure.data_storage.data_store import PolarisDataStore
+from infrastructure.data_storage.storage_backend import InMemoryGraphStorageBackend
+from digital_twin.knowledge_base import PolarisKnowledgeBase
+from digital_twin.telemetry_subscriber import subscribe_telemetry_persistence
 
 
 # ---------- Test Utilities ----------

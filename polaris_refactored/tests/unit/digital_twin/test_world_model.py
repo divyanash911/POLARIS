@@ -1,9 +1,9 @@
 import pytest
 from datetime import datetime, timezone
 
-from polaris_refactored.src.framework.events import TelemetryEvent
-from polaris_refactored.src.domain.models import SystemState, MetricValue, HealthStatus
-from polaris_refactored.src.digital_twin.world_model import (
+from framework.events import TelemetryEvent
+from domain.models import SystemState, MetricValue, HealthStatus
+from digital_twin.world_model import (
     StatisticalWorldModel,
     CompositeWorldModel,
     MLWorldModel,
@@ -43,19 +43,19 @@ async def test_composite_world_model_weighted_merge():
     # Model A predicts cpu=1.0 with high confidence
     class MockModelA(MLWorldModel):
         async def predict_system_behavior(self, system_id: str, time_horizon: int):
-            from polaris_refactored.src.digital_twin.world_model import PredictionResult
+            from digital_twin.world_model import PredictionResult
             return PredictionResult({"cpu": 1.0}, 0.9)
         async def simulate_adaptation_impact(self, system_id: str, action):
-            from polaris_refactored.src.digital_twin.world_model import SimulationResult
+            from digital_twin.world_model import SimulationResult
             return SimulationResult({"latency": 100.0}, 0.8)
 
     # Model B predicts cpu=0.0 with low confidence
     class MockModelB(MLWorldModel):
         async def predict_system_behavior(self, system_id: str, time_horizon: int):
-            from polaris_refactored.src.digital_twin.world_model import PredictionResult
+            from digital_twin.world_model import PredictionResult
             return PredictionResult({"cpu": 0.0}, 0.1)
         async def simulate_adaptation_impact(self, system_id: str, action):
-            from polaris_refactored.src.digital_twin.world_model import SimulationResult
+            from digital_twin.world_model import SimulationResult
             return SimulationResult({"latency": 200.0}, 0.2)
 
     comp = CompositeWorldModel([MockModelA(), MockModelB()])

@@ -1,13 +1,13 @@
 import asyncio
 import pytest
 
-from polaris_refactored.src.adapters.execution_adapter import (
+from adapters.execution_adapter import (
     ValidationStage,
     PreConditionCheckStage,
     ActionExecutionStage,
     PostExecutionVerificationStage,
 )
-from polaris_refactored.src.domain.models import (
+from domain.models import (
     AdaptationAction,
     ExecutionResult,
     ExecutionStatus,
@@ -15,7 +15,7 @@ from polaris_refactored.src.domain.models import (
     MetricValue,
     HealthStatus,
 )
-from polaris_refactored.src.domain.interfaces import ManagedSystemConnector
+from domain.interfaces import ManagedSystemConnector
 from datetime import datetime, timezone
 
 

@@ -13,7 +13,7 @@ from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
 
 from .models import LLMRequest, LLMResponse, ToolResult
-from ..caching import CacheEntry
+from infrastructure.caching import CacheEntry
 
 
 @dataclass

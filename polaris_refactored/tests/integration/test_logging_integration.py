@@ -13,13 +13,13 @@ import json
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from polaris_refactored.src.framework.configuration.core import PolarisConfiguration
-from polaris_refactored.src.infrastructure.observability.factory import (
+from framework.configuration.core import PolarisConfiguration
+from infrastructure.observability.factory import (
     configure_logging, get_polaris_logger, reset_logging, get_framework_logger,
     get_infrastructure_logger, LoggerFactory
 )
-from polaris_refactored.src.framework.configuration.models import LoggingConfiguration
-from polaris_refactored.src.infrastructure.observability.logging import LogLevel
+from framework.configuration.models import LoggingConfiguration
+from infrastructure.observability.logging import LogLevel
 from polaris_refactored.tests.fixtures.logging_fixtures import (
     integration_logging_setup, log_assertions, log_file_reader
 )
@@ -30,7 +30,7 @@ class TestFrameworkLoggingIntegration:
     
     def test_configuration_system_logging(self, integration_logging_setup):
         """Test that configuration system uses POLARIS logging."""
-        from polaris_refactored.src.framework.configuration.core import PolarisConfiguration
+        from framework.configuration.core import PolarisConfiguration
         
         # Create configuration with logging
         config = PolarisConfiguration()
@@ -99,7 +99,7 @@ class TestFrameworkLoggingIntegration:
             temp_file = f.name
         
         try:
-            from polaris_refactored.src.framework.configuration.sources import YAMLConfigurationSource
+            from framework.configuration.sources import YAMLConfigurationSource
             
             # Create configuration with hot-reload
             source = YAMLConfigurationSource(temp_file)
@@ -215,7 +215,7 @@ class TestObservabilityIntegration:
     
     def test_observe_component_decorator_logging(self, integration_logging_setup, capture_logs):
         """Test that @observe_polaris_component decorator integrates with logging."""
-        from polaris_refactored.src.infrastructure.observability import observe_polaris_component
+        from infrastructure.observability import observe_polaris_component
         
         @observe_polaris_component("test_component", log_method_calls=True)
         class TestComponent:
@@ -241,7 +241,7 @@ class TestObservabilityIntegration:
     
     def test_trace_decorator_logging_integration(self, integration_logging_setup, capture_logs):
         """Test integration between tracing decorators and logging."""
-        from polaris_refactored.src.infrastructure.observability import trace_adaptation_flow
+        from infrastructure.observability import trace_adaptation_flow
         
         logger = get_polaris_logger("test")
         

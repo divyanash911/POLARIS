@@ -11,11 +11,11 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, AsyncMock, patch
 from typing import List
 
-from polaris_refactored.src.adapters.base_adapter import (
+from adapters.base_adapter import (
     PolarisAdapter, AdapterState, AdapterHealthStatus, AdapterConfiguration,
     AdapterMetrics, AdapterValidationError, AdapterLifecycleError
 )
-from polaris_refactored.src.framework.events import PolarisEventBus
+from framework.events import PolarisEventBus
 
 
 class MockPolarisAdapter(PolarisAdapter):

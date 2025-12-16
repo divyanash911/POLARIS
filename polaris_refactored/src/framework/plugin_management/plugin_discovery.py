@@ -15,7 +15,7 @@ import yaml
 
 from .plugin_descriptor import PluginDescriptor
 from .plugin_validator import PluginValidator
-from ...domain.interfaces import ManagedSystemConnector
+from domain.interfaces import ManagedSystemConnector
 
 logger = logging.getLogger(__name__)
 

@@ -13,13 +13,13 @@ from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, field
 from enum import Enum
 
-from ..infrastructure.di import Injectable
-from ..infrastructure.exceptions import AdaptationError, PolarisException
-from ..infrastructure.observability import (
+from infrastructure.di import Injectable
+from infrastructure.exceptions import AdaptationError, PolarisException
+from infrastructure.observability import (
     observe_polaris_component, get_logger, get_metrics_collector, get_tracer,
     trace_connector_operation
 )
-from ..framework.events import PolarisEventBus
+from framework.events import PolarisEventBus
 
 
 class AdapterState(Enum):

@@ -16,14 +16,14 @@ Key Features:
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 
-from ..domain.models import SystemState
-from ..framework.events import TelemetryEvent
-from ..infrastructure.di import Injectable
-from ..infrastructure.observability import (
+from domain.models import SystemState
+from framework.events import TelemetryEvent
+from infrastructure.di import Injectable
+from infrastructure.observability import (
     observe_polaris_component, trace_world_model_operation, get_logger,
     get_metrics_collector, get_tracer
 )
-from ..infrastructure.observability.factory import get_digital_twin_logger
+from infrastructure.observability.factory import get_digital_twin_logger
 from .knowledge_base import PolarisKnowledgeBase
 
 

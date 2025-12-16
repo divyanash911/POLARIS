@@ -7,13 +7,13 @@ from typing import List
 from datetime import datetime
 import pytest
 
-from polaris_refactored.src.framework.events import PolarisEventBus, TelemetryEvent, ExecutionResultEvent
-from polaris_refactored.src.control_reasoning.adaptive_controller import PolarisAdaptiveController
-from polaris_refactored.src.digital_twin.knowledge_base import PolarisKnowledgeBase
-from polaris_refactored.src.infrastructure.data_storage.data_store import PolarisDataStore
-from polaris_refactored.src.infrastructure.data_storage.storage_backend import InMemoryGraphStorageBackend
-from polaris_refactored.src.adapters.execution_adapter.execution_adapter import ExecutionAdapter
-from polaris_refactored.src.domain.models import SystemState, HealthStatus, MetricValue
+from framework.events import PolarisEventBus, TelemetryEvent, ExecutionResultEvent
+from control_reasoning.adaptive_controller import PolarisAdaptiveController
+from digital_twin.knowledge_base import PolarisKnowledgeBase
+from infrastructure.data_storage.data_store import PolarisDataStore
+from infrastructure.data_storage.storage_backend import InMemoryGraphStorageBackend
+from adapters.execution_adapter.execution_adapter import ExecutionAdapter
+from domain.models import SystemState, HealthStatus, MetricValue
 
 from pathlib import Path
 import sys 

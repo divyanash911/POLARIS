@@ -11,20 +11,20 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, AsyncMock, patch
 from typing import Dict, Any
 
-from polaris_refactored.src.adapters.monitor_adapter import (
+from adapters.monitor_adapter import (
     MonitorAdapter, MetricCollectionStrategy, DirectConnectorStrategy,
     PollingStrategy, BatchCollectionStrategy, MonitoringTarget,
     CollectionResult, MetricCollectionMode, RetryingStrategyDecorator
 )
-from polaris_refactored.src.adapters.base_adapter import (
+from adapters.base_adapter import (
     AdapterConfiguration, AdapterHealthStatus, AdapterState
 )
-from polaris_refactored.src.framework.events import PolarisEventBus, TelemetryEvent
-from polaris_refactored.src.framework.plugin_management import (
+from framework.events import PolarisEventBus, TelemetryEvent
+from framework.plugin_management import (
     PolarisPluginRegistry, ManagedSystemConnectorFactory
 )
-from polaris_refactored.src.domain.models import MetricValue, SystemState, HealthStatus
-from polaris_refactored.src.domain.interfaces import ManagedSystemConnector
+from domain.models import MetricValue, SystemState, HealthStatus
+from domain.interfaces import ManagedSystemConnector
 
 
 class MockManagedSystemConnector(ManagedSystemConnector):
@@ -62,7 +62,7 @@ class MockManagedSystemConnector(ManagedSystemConnector):
         )
     
     async def execute_action(self, action) -> Any:
-        from polaris_refactored.src.domain.models import ExecutionResult, ExecutionStatus
+        from domain.models import ExecutionResult, ExecutionStatus
         return ExecutionResult(
             action_id="test_action",
             status=ExecutionStatus.SUCCESS,

@@ -22,8 +22,8 @@ import asyncio
 import logging
 from typing import Optional, Dict, Any
 
-from ...domain.models import AdaptationAction, ExecutionResult, ExecutionStatus, SystemState
-from ...domain.interfaces import ManagedSystemConnector
+from domain.models import AdaptationAction, ExecutionResult, ExecutionStatus, SystemState
+from domain.interfaces import ManagedSystemConnector
 
 
 logger = logging.getLogger(__name__)

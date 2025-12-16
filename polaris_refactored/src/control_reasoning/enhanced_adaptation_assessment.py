@@ -17,9 +17,9 @@ from datetime import datetime, timezone, timedelta
 from collections import deque, defaultdict
 from enum import Enum
 
-from ..domain.models import MetricValue
-from ..framework.events import TelemetryEvent
-from ..infrastructure.observability import get_logger, get_metrics_collector
+from domain.models import MetricValue
+from framework.events import TelemetryEvent
+from infrastructure.observability import get_logger, get_metrics_collector
 from .adaptive_controller import AdaptationNeed
 
 
@@ -216,7 +216,9 @@ class AdaptiveThresholdManager:
             "basic_response_time": {"high": 1000.0, "low": 100.0},
             "optional_response_time": {"high": 2000.0, "low": 200.0},
             "memory_usage": {"high": 0.85, "low": 0.3},
-            "cpu_usage": {"high": 0.8, "low": 0.2}
+            "cpu_usage": {"high": 0.8, "low": 0.2},
+            "cpu": {"high": 0.8, "low": 0.2},
+            "latency": {"high": 0.5, "low": 0.05}
         }
         
         for metric_name, thresholds in default_thresholds.items():

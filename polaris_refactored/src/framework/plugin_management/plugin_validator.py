@@ -9,7 +9,7 @@ import inspect
 from pathlib import Path
 from typing import List, Dict, Any, Type
 
-from ...domain.interfaces import ManagedSystemConnector
+from domain.interfaces import ManagedSystemConnector
 
 
 class PluginValidator:
@@ -91,7 +91,7 @@ class PluginValidator:
         """Validate plugin metadata."""
         errors = []
         
-        required_fields = ['name']
+        required_fields = ['name', 'version', 'connector_class']
         for field in required_fields:
             if field not in metadata:
                 errors.append(f"Missing required field: {field}")
@@ -126,7 +126,12 @@ class PluginValidator:
             if not issubclass(connector_class, ManagedSystemConnector):
                 errors.append("Connector must inherit from ManagedSystemConnector")
             
-            # Check required methods
+            # Check for abstract methods (unimplemented)
+            if inspect.isabstract(connector_class):
+                for method_name in getattr(connector_class, "__abstractmethods__", []):
+                     errors.append(f"Missing required method: {method_name}")
+
+            # Check required methods existence and signature (for implemented ones)
             required_methods = [
                 'connect', 'disconnect', 'get_system_id', 'collect_metrics',
                 'get_system_state', 'execute_action', 'validate_action', 'get_supported_actions'
@@ -136,6 +141,10 @@ class PluginValidator:
                 if not hasattr(connector_class, method_name):
                     errors.append(f"Missing required method: {method_name}")
                 else:
+                    # Skip if abstract (already reported)
+                    if inspect.isabstract(connector_class) and method_name in getattr(connector_class, "__abstractmethods__", []):
+                        continue
+
                     method = getattr(connector_class, method_name)
                     if not callable(method):
                         errors.append(f"Method {method_name} is not callable")

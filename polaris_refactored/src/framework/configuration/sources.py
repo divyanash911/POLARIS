@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Dict, Any, Union
 from abc import ABC, abstractmethod
 
-from ...infrastructure.exceptions import ConfigurationError
+from infrastructure.exceptions import ConfigurationError
 
 
 class ConfigurationSource(ABC):

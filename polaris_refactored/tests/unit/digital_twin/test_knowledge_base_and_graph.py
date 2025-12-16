@@ -3,18 +3,18 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from polaris_refactored.src.infrastructure.data_storage import (
+from infrastructure.data_storage import (
     InMemoryGraphStorageBackend,
     PolarisDataStore,
 )
-from polaris_refactored.src.digital_twin.knowledge_base import PolarisKnowledgeBase
-from polaris_refactored.src.domain.models import (
+from digital_twin.knowledge_base import PolarisKnowledgeBase
+from domain.models import (
     SystemState,
     MetricValue,
     HealthStatus,
     LearnedPattern,
 )
-from polaris_refactored.src.framework.events import TelemetryEvent
+from framework.events import TelemetryEvent
 
 
 @pytest.mark.asyncio

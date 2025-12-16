@@ -2,10 +2,10 @@ import asyncio
 from datetime import datetime, timezone
 import pytest
 
-from polaris_refactored.src.adapters.base_adapter import AdapterConfiguration
-from polaris_refactored.src.adapters.execution_adapter.execution_adapter import ExecutionAdapter
-from polaris_refactored.src.domain.interfaces import ManagedSystemConnector
-from polaris_refactored.src.domain.models import (
+from adapters.base_adapter import AdapterConfiguration
+from adapters.execution_adapter.execution_adapter import ExecutionAdapter
+from domain.interfaces import ManagedSystemConnector
+from domain.models import (
     AdaptationAction,
     ExecutionResult,
     ExecutionStatus,
@@ -13,8 +13,8 @@ from polaris_refactored.src.domain.models import (
     MetricValue,
     HealthStatus,
 )
-from polaris_refactored.src.framework.events import PolarisEventBus, ExecutionResultEvent
-from polaris_refactored.src.framework.plugin_management.plugin_registry import PolarisPluginRegistry
+from framework.events import PolarisEventBus, ExecutionResultEvent
+from framework.plugin_management.plugin_registry import PolarisPluginRegistry
 
 
 class FakeConnector(ManagedSystemConnector):

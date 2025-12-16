@@ -9,13 +9,13 @@ import pytest
 from unittest.mock import MagicMock, patch
 from dataclasses import dataclass
 
-from polaris_refactored.src.adapters.monitor_adapter.monitor_adapter import MonitorAdapter
-from polaris_refactored.src.adapters.monitor_adapter.monitor_types import MonitoringTarget, MetricCollectionMode
-from polaris_refactored.src.adapters.base_adapter import AdapterConfiguration
-from polaris_refactored.src.framework.events import PolarisEventBus
-from polaris_refactored.src.domain.models import MetricValue, SystemState, HealthStatus
-from polaris_refactored.src.domain.interfaces import ManagedSystemConnector
-from polaris_refactored.src.framework.events import TelemetryEvent as RealTelemetryEvent
+from adapters.monitor_adapter.monitor_adapter import MonitorAdapter
+from adapters.monitor_adapter.monitor_types import MonitoringTarget, MetricCollectionMode
+from adapters.base_adapter import AdapterConfiguration
+from framework.events import PolarisEventBus
+from domain.models import MetricValue, SystemState, HealthStatus
+from domain.interfaces import ManagedSystemConnector
+from framework.events import TelemetryEvent as RealTelemetryEvent
 
 class MockFastConnector(ManagedSystemConnector):
     """Fast connector for performance testing."""
@@ -68,7 +68,7 @@ class MockFastConnector(ManagedSystemConnector):
 class TestMonitorAdapterPerformance:
     """Performance and load testing for Monitor Adapter."""
 
-    FACTORY_PATH = "polaris_refactored.src.adapters.monitor_adapter.monitor_adapter.ManagedSystemConnectorFactory"
+    FACTORY_PATH = "adapters.monitor_adapter.monitor_adapter.ManagedSystemConnectorFactory"
 
     @pytest.fixture
     async def event_bus(self):

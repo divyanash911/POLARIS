@@ -2,8 +2,8 @@ import pytest
 import asyncio
 from datetime import datetime, timezone
 
-from polaris_refactored.src.domain.interfaces import ManagedSystemConnector, AdaptationCommand, EventHandler
-from polaris_refactored.src.domain.models import (
+from domain.interfaces import ManagedSystemConnector, AdaptationCommand, EventHandler
+from domain.models import (
     MetricValue,
     SystemState,
     AdaptationAction,

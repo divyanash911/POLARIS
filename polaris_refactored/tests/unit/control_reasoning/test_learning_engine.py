@@ -2,15 +2,15 @@ import pytest
 from datetime import datetime, timezone
 import uuid
 
-from polaris_refactored.src.digital_twin.learning_engine import (
+from digital_twin.learning_engine import (
     PolarisLearningEngine,
     LearningContext,
     ReinforcementLearningStrategy,
     PatternRecognitionStrategy,
 )
-from polaris_refactored.src.digital_twin.knowledge_base import PolarisKnowledgeBase
-from polaris_refactored.src.infrastructure.data_storage import InMemoryGraphStorageBackend, PolarisDataStore
-from polaris_refactored.src.domain.models import ExecutionResult, ExecutionStatus, LearnedPattern
+from digital_twin.knowledge_base import PolarisKnowledgeBase
+from infrastructure.data_storage import InMemoryGraphStorageBackend, PolarisDataStore
+from domain.models import ExecutionResult, ExecutionStatus, LearnedPattern
 
 
 @pytest.mark.asyncio

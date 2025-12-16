@@ -12,10 +12,10 @@ import logging
 from typing import Dict, Any, Optional
 from datetime import datetime, timedelta, timezone
 
-from ...domain.models import SystemState, HealthStatus, MetricValue
-from ...framework.events import PolarisEventBus, TelemetryEvent, EventMetadata
-from ...framework.plugin_management import PolarisPluginRegistry, ManagedSystemConnectorFactory
-from ..base_adapter import (
+from domain.models import SystemState, HealthStatus, MetricValue
+from framework.events import PolarisEventBus, TelemetryEvent, EventMetadata
+from framework.plugin_management import PolarisPluginRegistry, ManagedSystemConnectorFactory
+from adapters.base_adapter import (
     PolarisAdapter, AdapterConfiguration, AdapterHealthStatus, 
     AdapterValidationError
 )
