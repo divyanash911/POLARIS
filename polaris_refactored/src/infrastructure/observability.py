@@ -318,10 +318,16 @@ def observe_polaris_component(component_name: str, auto_trace: bool = False, aut
             # Add observability to class methods
             for attr_name in dir(cls):
                 attr = getattr(cls, attr_name)
-                if callable(attr) and not attr_name.startswith('_'):
-                    setattr(cls, attr_name, _wrap_method_with_observability(attr, component_name, auto_trace, auto_metrics, log_method_calls))
+                # Skip private methods and non-callables
+                if not callable(attr) or attr_name.startswith('_'):
+                    continue
+                # Skip methods that are already wrapped (have __wrapped__ attribute from functools.wraps)
+                if hasattr(attr, '__wrapped__'):
+                    continue
+                setattr(cls, attr_name, _wrap_method_with_observability(attr, component_name, auto_trace, auto_metrics, log_method_calls))
         return cls
     return decorator
+
 
 
 def trace_adaptation_flow(operation_name: str):

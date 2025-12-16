@@ -207,8 +207,10 @@ def _instrument_class_methods(
             isinstance(attr, (property, staticmethod, classmethod))):
             continue
         
-        # Skip if already instrumented
-        if hasattr(attr, '_polaris_instrumented'):
+        # Skip if already instrumented OR already wrapped by functools.wraps
+        # This prevents double-wrapping methods decorated with @trace_adaptation_flow, etc.
+        if (hasattr(attr, '_polaris_instrumented') or 
+            hasattr(attr, '__wrapped__')):
             continue
         
         # Create instrumented version

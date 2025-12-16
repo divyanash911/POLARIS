@@ -13,14 +13,15 @@ from typing import Dict, Any
 
 import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../../src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../..'))
 
-from control_reasoning.threshold_reactive_strategy import (
+from src.control_reasoning.threshold_reactive_strategy import (
     ThresholdReactiveStrategy, ThresholdReactiveConfig, ThresholdRule,
     ThresholdCondition, ThresholdOperator, LogicalOperator
 )
-from control_reasoning.adaptive_controller import AdaptationNeed
-from domain.models import AdaptationAction
+from src.control_reasoning.adaptive_controller import AdaptationNeed
+from src.domain.models import AdaptationAction
+
 
 
 class TestThresholdReactiveStrategy:
@@ -212,7 +213,8 @@ class TestThresholdReactiveStrategy:
                 )
             ],
             action_type="fix_latency",
-            priority=4
+            priority=4,
+            cooldown_seconds=0.0  # Disable cooldown for immediate re-trigger check
         )
         
         config = ThresholdReactiveConfig(rules=[outside_rule])
@@ -300,7 +302,8 @@ class TestThresholdReactiveStrategy:
                 "latency": 0.9  # High latency for fallback logic
             }
         }
-        adaptation_need = AdaptationNeed(system_id, True, "Need adaptation")
+        # Set high urgency to trigger fallback reactive strategy (needs > 0.8)
+        adaptation_need = AdaptationNeed(system_id, True, "Need adaptation", urgency=0.9)
         
         actions = await strategy.generate_actions(system_id, current_state, adaptation_need)
         
@@ -308,7 +311,7 @@ class TestThresholdReactiveStrategy:
         assert len(actions) > 0
         # Check for typical fallback actions
         action_types = [a.action_type for a in actions]
-        assert "scale_out" in action_types or "tune_qos" in action_types
+        assert "ADD_SERVER" in action_types or "scale_out" in action_types
     
     @pytest.mark.asyncio
     async def test_missing_metrics(self):

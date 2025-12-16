@@ -424,17 +424,42 @@ class PolarisMetricsCollector:
 
     # Compatibility helper for code that expects a generic increment_counter API
     def increment_counter(self, name: str, labels: Optional[dict] = None) -> None:
-        """Increment a counter metric by name. Safe no-op if metric not registered.
-
-        This method is provided for compatibility: some components expect a generic
-        increment_counter(name, labels) helper on the global metrics collector.
-        """
+        """Increment a counter metric by name. Safe no-op if metric not registered."""
         metric = self.get_metric(name)
         if isinstance(metric, Counter):
             metric.increment(labels=labels or {})
         else:
             # Metric not found or not a counter: log a debug and continue (non-fatal)
             pass
+
+    # Compatibility methods for simplified MetricsCollector API
+    def record_counter(self, name: str, value: float = 1.0, tags: Optional[Dict[str, str]] = None) -> None:
+        """Record a counter metric (compatibility API)."""
+        metric = self.get_metric(name)
+        if not metric:
+            metric = self.register_counter(name, f"Counter {name}", list(tags.keys()) if tags else None)
+        
+        if isinstance(metric, Counter):
+            metric.increment(value, labels=tags)
+
+    def record_gauge(self, name: str, value: float, tags: Optional[Dict[str, str]] = None) -> None:
+        """Record a gauge metric (compatibility API)."""
+        metric = self.get_metric(name)
+        if not metric:
+            metric = self.register_gauge(name, f"Gauge {name}", list(tags.keys()) if tags else None)
+        
+        if isinstance(metric, Gauge):
+            metric.set(value, labels=tags)
+
+    def record_histogram(self, name: str, value: float, tags: Optional[Dict[str, str]] = None) -> None:
+        """Record a histogram metric (compatibility API)."""
+        metric = self.get_metric(name)
+        if not metric:
+            metric = self.register_histogram(name, f"Histogram {name}", labels=list(tags.keys()) if tags else None)
+        
+        if isinstance(metric, Histogram):
+            metric.observe(value, labels=tags)
+
 
 
 class MetricsExporter(ABC):

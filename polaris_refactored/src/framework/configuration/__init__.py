@@ -7,7 +7,14 @@ Provides configuration management with multiple sources and hot reload capabilit
 from .core import PolarisConfiguration
 from .builder import ConfigurationBuilder
 from .sources import ConfigurationSource, YAMLConfigurationSource, EnvironmentConfigurationSource
-from .models import FrameworkConfiguration, ManagedSystemConfiguration
+from .models import (
+    FrameworkConfiguration, 
+    ManagedSystemConfiguration,
+    NATSConfiguration,
+    TelemetryConfiguration,
+    LoggingConfiguration
+)
+from .validation import ConfigurationValidator, ConfigurationValidationError
 
 __all__ = [
     'PolarisConfiguration',
@@ -16,5 +23,10 @@ __all__ = [
     'YAMLConfigurationSource',
     'EnvironmentConfigurationSource',
     'FrameworkConfiguration',
-    'ManagedSystemConfiguration'
+    'ManagedSystemConfiguration',
+    'NATSConfiguration',
+    'TelemetryConfiguration',
+    'LoggingConfiguration',
+    'ConfigurationValidator',
+    'ConfigurationValidationError'
 ]
