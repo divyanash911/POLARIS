@@ -1,5 +1,6 @@
 import pytest
 import asyncio
+import time
 from datetime import datetime, timezone
 from typing import Dict, Optional, Any, List
 from unittest.mock import AsyncMock
@@ -22,9 +23,14 @@ class MockEventBus:
         self.published = []
         self.publish_calls = 0
         
-    async def publish_adaptation_needed(self, event: AdaptationEvent):
+    async def publish(self, event) -> None:
+        """Generic publish method that the controller calls."""
         self.publish_calls += 1
         self.published.append(event)
+        
+    async def publish_adaptation_needed(self, event: AdaptationEvent):
+        """Specific method for adaptation events."""
+        await self.publish(event)
 
 
 class MockWorldModel:
@@ -324,7 +330,7 @@ async def test_controller_no_strategies_available():
     """Test behavior when no control strategies are configured."""
     eb = MockEventBus()
     ctrl = PolarisAdaptiveController(event_bus=eb)
-    ctrl._control_strategies = []  # Remove all strategies
+    ctrl.control_strategies = []  # Remove all strategies
     
     state = SystemState(
         system_id="sys-no-strategies",
@@ -349,9 +355,15 @@ async def test_controller_metrics_update_during_processing():
     
     # Create a slow strategy to simulate processing time
     class SlowStrategy(ControlStrategy):
-        async def generate_actions(self, need, context):
+        async def generate_actions(self, system_id, current_state, adaptation_need):
             await asyncio.sleep(0.1)  # Simulate processing time
-            return [AdaptationAction("scale_out")]
+            return [AdaptationAction(
+                action_id=f"slow_{system_id}_{int(time.time())}",
+                action_type="scale_out",
+                target_system=system_id,
+                parameters={"reason": "slow_strategy_test"},
+                priority=2
+            )]
     
     ctrl = PolarisAdaptiveController(
         event_bus=eb,

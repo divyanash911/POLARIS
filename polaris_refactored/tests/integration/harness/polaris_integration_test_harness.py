@@ -376,9 +376,13 @@ class PolarisIntegrationTestHarness:
         from src.infrastructure.data_storage.data_store import PolarisDataStore as PolarisDataStoreClass
 
         if message_broker is not None:
-            # For tests we often use MockMessageBroker that already implements
-            # the MessageBroker interface; create a PolarisMessageBus wrapper.
-            polaris_message_bus = PolarisMessageBus(message_broker)
+            # For tests, we create a standalone PolarisMessageBus
+            # The message_broker parameter is ignored since PolarisMessageBus
+            # is a standalone in-memory implementation
+            polaris_message_bus = PolarisMessageBus()
+        else:
+            # Create a default PolarisMessageBus for tests
+            polaris_message_bus = PolarisMessageBus()
 
         if data_store is not None:
             # If data_store is already a PolarisDataStore-like mock, use it

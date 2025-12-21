@@ -62,6 +62,22 @@ class StatisticalReasoningStrategy(ReasoningStrategy):
         """Perform statistical reasoning."""
         insights = []
         
+        # Analyze current metrics for anomalies
+        if context.current_state and "metrics" in context.current_state:
+            metrics = context.current_state["metrics"]
+            for metric_name, metric_value in metrics.items():
+                if hasattr(metric_value, 'value'):
+                    value = metric_value.value
+                    # Simple anomaly detection - values above 0.9 are considered anomalies
+                    if value > 0.9:
+                        insights.append({
+                            "type": "statistical_anomaly",
+                            "metric": metric_name,
+                            "value": value,
+                            "threshold": 0.9,
+                            "analysis": f"Anomaly detected in {metric_name}: {value} > 0.9"
+                        })
+        
         # Simple statistical analysis
         if context.historical_data:
             insights.append({
@@ -88,6 +104,21 @@ class CausalReasoningStrategy(ReasoningStrategy):
         """Perform causal reasoning."""
         insights = []
         
+        # Analyze dependencies and causal relationships
+        if self.knowledge_base:
+            try:
+                # Get dependency information
+                deps = await self.knowledge_base.get_dependency_chain(context.system_id)
+                if deps and "neighbors" in deps:
+                    insights.append({
+                        "type": "causal_link",
+                        "system_id": context.system_id,
+                        "dependencies": deps["neighbors"],
+                        "analysis": f"Found causal links to {len(deps['neighbors'])} systems"
+                    })
+            except Exception as e:
+                self.logger.warning(f"Error getting dependencies: {e}")
+        
         # Simple causal analysis
         insights.append({
             "type": "causal_analysis",
@@ -112,12 +143,13 @@ class ExperienceBasedReasoningStrategy(ReasoningStrategy):
     async def reason(self, context: ReasoningContext) -> ReasoningResult:
         """Perform experience-based reasoning."""
         insights = []
+        recommendations = []
         
         # Use knowledge base if available
         if self.knowledge_base:
             try:
                 # Get similar patterns
-                similar_patterns = self.knowledge_base.get_similar_patterns(
+                similar_patterns = await self.knowledge_base.get_similar_patterns(
                     context.current_state, 
                     similarity_threshold=0.7
                 )
@@ -128,13 +160,19 @@ class ExperienceBasedReasoningStrategy(ReasoningStrategy):
                         "similar_patterns": len(similar_patterns),
                         "analysis": f"Found {len(similar_patterns)} similar patterns"
                     })
+                    
+                    # Generate recommendations from patterns
+                    for pattern in similar_patterns:
+                        if hasattr(pattern, 'outcomes') and pattern.outcomes:
+                            recommendations.append(pattern.outcomes)
+                        
             except Exception as e:
                 self.logger.warning(f"Error accessing knowledge base: {e}")
         
         return ReasoningResult(
             insights=insights,
             confidence=0.7 if insights else 0.3,
-            recommendations=[]
+            recommendations=recommendations
         )
 
 

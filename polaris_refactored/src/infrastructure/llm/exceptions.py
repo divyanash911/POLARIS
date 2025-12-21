@@ -25,10 +25,12 @@ class LLMIntegrationError(PolarisException):
         if model_name:
             context['model_name'] = model_name
         
-        if 'error_code' not in kwargs:
-            kwargs['error_code'] = "LLM_INTEGRATION_ERROR"
+        # Set default error_code if not provided
+        error_code = kwargs.pop('error_code', "LLM_INTEGRATION_ERROR")
+        
         super().__init__(
             message=message,
+            error_code=error_code,
             context=context,
             **kwargs
         )
@@ -53,9 +55,12 @@ class LLMAPIError(LLMIntegrationError):
         if request_id:
             context['request_id'] = request_id
         
+        # Don't override error_code if it's already provided by a child class
+        if 'error_code' not in kwargs:
+            kwargs['error_code'] = "LLM_API_ERROR"
+            
         super().__init__(
             message=message,
-            error_code="LLM_API_ERROR",
             context=context,
             **kwargs
         )
@@ -82,8 +87,8 @@ class LLMResponseParsingError(LLMIntegrationError):
         
         super().__init__(
             message=message,
-            error_code="LLM_RESPONSE_PARSING_ERROR",
             context=context,
+            error_code="LLM_RESPONSE_PARSING_ERROR",
             **kwargs
         )
 
@@ -109,8 +114,8 @@ class LLMToolError(LLMIntegrationError):
         
         super().__init__(
             message=message,
-            error_code="LLM_TOOL_ERROR",
             context=context,
+            error_code="LLM_TOOL_ERROR",
             **kwargs
         )
 
@@ -133,8 +138,8 @@ class LLMConfigurationError(LLMIntegrationError):
         
         super().__init__(
             message=message,
-            error_code="LLM_CONFIGURATION_ERROR",
             context=context,
+            error_code="LLM_CONFIGURATION_ERROR",
             **kwargs
         )
 
@@ -154,8 +159,8 @@ class LLMTimeoutError(LLMAPIError):
         
         super().__init__(
             message=message,
-            error_code="LLM_TIMEOUT_ERROR",
             context=context,
+            error_code="LLM_TIMEOUT_ERROR",
             **kwargs
         )
 
@@ -175,7 +180,7 @@ class LLMRateLimitError(LLMAPIError):
         
         super().__init__(
             message=message,
-            error_code="LLM_RATE_LIMIT_ERROR",
             context=context,
+            error_code="LLM_RATE_LIMIT_ERROR",
             **kwargs
         )

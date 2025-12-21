@@ -15,7 +15,7 @@ from typing import List, Optional, Sequence
 import time
 import shutil
 
-from utils.coverage_utils import CoverageAnalyzer, TestMetrics
+from tests.utils.coverage_utils import CoverageAnalyzer, TestMetrics
 
 
 class PolarisTestRunner:
@@ -122,7 +122,7 @@ class PolarisTestRunner:
 
         # Add verbosity
         if verbose:
-            cmd.append("-v")
+            cmd.append("-vv")
         else:
             cmd.append("-q")
 
@@ -154,7 +154,7 @@ class PolarisTestRunner:
 
         return success
 
-    def run_integration_tests(self, verbose: bool = True) -> bool:
+    def run_integration_tests(self, verbose: bool = True, pattern: Optional[str] = None) -> bool:
         """Run integration tests."""
         print("🔗 Running POLARIS Integration Tests...")
 
@@ -169,10 +169,18 @@ class PolarisTestRunner:
             "pytest",
             str(integration_dir),
             "--integration",
+            "-m", "integration",
         ]
 
         if verbose:
-            cmd.append("-v")
+            cmd.append("-vv")
+        else:
+            cmd.append("-q")
+
+        # Add pattern support for integration tests
+        if pattern:
+            if self._looks_like_k_expression(pattern) or not self._looks_like_glob(pattern):
+                cmd.extend(["-k", pattern])
 
         print("Running pytest command:", " ".join(cmd))
 
@@ -190,7 +198,7 @@ class PolarisTestRunner:
 
         return success
 
-    def run_performance_tests(self, verbose: bool = True) -> bool:
+    def run_performance_tests(self, verbose: bool = True, pattern: Optional[str] = None) -> bool:
         """Run performance tests."""
         print("⚡ Running POLARIS Performance Tests...")
 
@@ -208,10 +216,18 @@ class PolarisTestRunner:
             "pytest",
             target,
             "--performance",
+            "-m", "performance",
         ]
 
         if verbose:
-            cmd.append("-v")
+            cmd.append("-vv")
+        else:
+            cmd.append("-q")
+
+        # Add pattern support for performance tests
+        if pattern:
+            if self._looks_like_k_expression(pattern) or not self._looks_like_glob(pattern):
+                cmd.extend(["-k", pattern])
 
         print("Running pytest command:", " ".join(cmd))
 
@@ -402,9 +418,9 @@ Examples:
                 coverage=coverage, verbose=verbose, fail_fast=args.fail_fast, pattern=args.pattern
             )
         elif args.integration:
-            success = runner.run_integration_tests(verbose=verbose)
+            success = runner.run_integration_tests(verbose=verbose, pattern=args.pattern)
         elif args.performance:
-            success = runner.run_performance_tests(verbose=verbose)
+            success = runner.run_performance_tests(verbose=verbose, pattern=args.pattern)
         elif args.all:
             success = runner.run_all_tests(coverage=coverage, verbose=verbose)
         elif args.coverage:

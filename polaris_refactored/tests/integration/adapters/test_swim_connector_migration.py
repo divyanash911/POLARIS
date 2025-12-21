@@ -9,8 +9,8 @@ import asyncio
 from unittest.mock import Mock, patch, AsyncMock
 from datetime import datetime, timezone
 
-from polaris_refactored.plugins.swim.connector import SwimTCPConnector
-from domain.models import AdaptationAction, HealthStatus, ExecutionStatus
+from plugins.swim.connector import SwimTCPConnector
+from src.domain.models import AdaptationAction, HealthStatus, ExecutionStatus
 
 
 class TestSwimConnectorMigration:
@@ -111,9 +111,13 @@ class TestSwimConnectorMigration:
                 "5",    # get_servers
                 "4",    # get_active_servers  
                 "10",   # get_max_servers
-                "0.8",  # dimmer
+                "0.8",  # get_dimmer
                 "150.5", # get_basic_rt (optional)
-                "200.3"  # get_opt_rt (optional)
+                "200.3", # get_opt_rt (optional)
+                "0.1",  # get_utilization 1
+                "0.2",  # get_utilization 2
+                "0.3",  # get_utilization 3
+                "0.4",  # get_utilization 4
             ]
             
             metrics = await connector.collect_metrics()
@@ -130,7 +134,7 @@ class TestSwimConnectorMigration:
             assert metrics["active_servers"].value == 4
             assert metrics["max_servers"].value == 10
             assert metrics["dimmer"].value == 0.8
-            assert metrics["server_utilization"].value == 0.4  # 4/10
+            assert metrics["server_utilization"].value == 0.25  # (0.1+0.2+0.3+0.4)/4
     
     @pytest.mark.asyncio
     async def test_collect_metrics_failure(self, connector):
