@@ -58,8 +58,7 @@ clean: ## Clean test artifacts
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true
 
 install: ## Install test dependencies
-	@echo "Installing test dependencies..."
-	pip install pytest pytest-cov pytest-asyncio pytest-watch pytest-xdist
+	bash ./install.sh
 
 # Advanced targets
 unit-parallel: ## Run unit tests in parallel

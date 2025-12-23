@@ -703,6 +703,8 @@ class PolarisFramework(Injectable):
                         api_key=llm_config.get("api_key", ""),
                         api_endpoint=llm_config.get("api_endpoint", ""),
                         model_name=llm_config.get("model_name", "gpt-4"),
+                        max_tokens=llm_config.get("max_tokens", 4096),
+                        temperature=llm_config.get("temperature", 0.1),
                         timeout=llm_config.get("timeout", 60),
                         max_retries=llm_config.get("max_retries", 3)
                     )

@@ -210,15 +210,25 @@ class AdaptiveThresholdManager:
         self._initialize_default_thresholds()
     
     def _initialize_default_thresholds(self) -> None:
-        """Initialize default thresholds for common metrics."""
+        """Initialize default thresholds for common metrics.
+        
+        All thresholds use normalized values (0-1 scale).
+        Metrics should be normalized at the connector level before being processed.
+        """
         default_thresholds = {
+            # All values are normalized to 0-1 scale
             "server_utilization": {"high": 0.8, "low": 0.2},
-            "basic_response_time": {"high": 1000.0, "low": 100.0},
-            "optional_response_time": {"high": 2000.0, "low": 200.0},
+            "basic_response_time": {"high": 0.5, "low": 0.05},   # 50% of max response time
+            "optional_response_time": {"high": 0.6, "low": 0.1},
             "memory_usage": {"high": 0.85, "low": 0.3},
             "cpu_usage": {"high": 0.8, "low": 0.2},
             "cpu": {"high": 0.8, "low": 0.2},
-            "latency": {"high": 0.5, "low": 0.05}
+            "latency": {"high": 0.5, "low": 0.05},
+            "response_time": {"high": 0.45, "low": 0.05},        # 45% of max (900ms/2000ms)
+            "throughput": {"high": 0.9, "low": 0.1},             # High throughput is good
+            "error_rate": {"high": 0.05, "low": 0.005},          # 5% error rate is high
+            "active_connections": {"high": 0.8, "low": 0.1},
+            "capacity": {"high": 0.9, "low": 0.1},
         }
         
         for metric_name, thresholds in default_thresholds.items():

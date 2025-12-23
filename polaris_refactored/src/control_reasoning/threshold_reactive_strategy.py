@@ -382,11 +382,16 @@ class ThresholdReactiveStrategy(ReactiveControlStrategy):
     
     def _get_metric_value(self, metric_name: str, metrics: Dict[str, Any]) -> Optional[float]:
         """Extract numeric metric value from metrics dictionary."""
+        # Import MetricValue for type checking
+        from domain.models import MetricValue
+        
         # Direct lookup
         if metric_name in metrics:
             value = metrics[metric_name]
             if isinstance(value, (int, float)):
                 return float(value)
+            elif isinstance(value, MetricValue):
+                return float(value.value)
             elif isinstance(value, dict) and "value" in value:
                 return float(value["value"])
         
@@ -406,6 +411,8 @@ class ThresholdReactiveStrategy(ReactiveControlStrategy):
                 value = metrics[variation]
                 if isinstance(value, (int, float)):
                     return float(value)
+                elif isinstance(value, MetricValue):
+                    return float(value.value)
                 elif isinstance(value, dict) and "value" in value:
                     return float(value["value"])
         

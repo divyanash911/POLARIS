@@ -66,19 +66,22 @@ class LoggerFactory:
             self._config = config
             self._configured = True
             
-            # Configure default logging system
-            log_level = LogLevel(config.level.upper())
-            use_json = (config.format.lower() == "json")
-            log_file = None
+            # Get root logger
+            root_logger = get_logger("polaris")
+            root_logger.handlers.clear()
+            root_logger.set_level(LogLevel(config.level.upper()))
             
+            # Add console handler with human-readable format
+            if config.output in ["console", "both"]:
+                console_formatter = HumanReadableFormatter()
+                console_handler = ConsoleLogHandler(console_formatter)
+                root_logger.add_handler(console_handler)
+            
+            # Add file handler with JSON format
             if config.output in ["file", "both"] and config.file_path:
-                log_file = Path(config.file_path)
-            
-            configure_default_logging(
-                level=log_level,
-                use_json=use_json,
-                log_file=log_file
-            )
+                file_formatter = JSONLogFormatter()
+                file_handler = FileLogHandler(file_formatter, config.file_path)
+                root_logger.add_handler(file_handler)
             
             # Reconfigure existing loggers
             self._reconfigure_existing_loggers()
@@ -138,20 +141,16 @@ class LoggerFactory:
         # Set log level
         logger.set_level(LogLevel(config.level.upper()))
         
-        # Create formatter
-        if config.format.lower() == "json":
-            formatter = JSONLogFormatter()
-        else:
-            formatter = HumanReadableFormatter()
-        
-        # Add console handler if needed
+        # Add console handler if needed - always use human-readable format for console
         if config.output in ["console", "both"]:
-            console_handler = ConsoleLogHandler(formatter)
+            console_formatter = HumanReadableFormatter()
+            console_handler = ConsoleLogHandler(console_formatter)
             logger.add_handler(console_handler)
         
-        # Add file handler if needed
+        # Add file handler if needed - always use JSON format for file
         if config.output in ["file", "both"] and config.file_path:
-            file_handler = FileLogHandler(formatter, config.file_path)
+            file_formatter = JSONLogFormatter()
+            file_handler = FileLogHandler(file_formatter, config.file_path)
             logger.add_handler(file_handler)
     
     def _reconfigure_existing_loggers(self) -> None:

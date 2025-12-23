@@ -347,8 +347,46 @@ Use the available tools to gather information and build a comprehensive understa
                     tool_choice="auto" if tools else None
                 )
                 
+                # Log the LLM request details (prompt)
+                self.logger.info("=" * 80)
+                self.logger.info(f"LLM REQUEST - Iteration {conversation.current_iteration}")
+                self.logger.info("=" * 80)
+                self.logger.info(f"Model: {request.model_name}")
+                self.logger.info(f"Max Tokens: {request.max_tokens}, Temperature: {request.temperature}")
+                self.logger.info(f"Tools Available: {len(tools) if tools else 0}")
+                
+                # Log each message in the conversation
+                for i, msg in enumerate(messages):
+                    self.logger.info(f"--- Message {i} [{msg.role.value}] ---")
+                    # Truncate long messages for readability
+                    content_preview = msg.content[:1000] + "..." if len(msg.content) > 1000 else msg.content
+                    self.logger.info(f"Content: {content_preview}")
+                
+                self.logger.info("-" * 40)
+                self.logger.info("Sending request to LLM API...")
+                
                 # Get LLM response
                 response = await self.llm_client.generate_response(request)
+                
+                # Log the LLM response
+                self.logger.info("=" * 80)
+                self.logger.info(f"LLM RESPONSE - Iteration {conversation.current_iteration}")
+                self.logger.info("=" * 80)
+                self.logger.info(f"Finish Reason: {response.finish_reason}")
+                self.logger.info(f"Usage: {response.usage}")
+                self.logger.info(f"Function Calls: {len(response.function_calls)}")
+                
+                # Log response content
+                content_preview = response.content[:2000] + "..." if len(response.content) > 2000 else response.content
+                self.logger.info(f"Response Content:\n{content_preview}")
+                
+                # Log function calls if any
+                if response.function_calls:
+                    self.logger.info("Function Calls Requested:")
+                    for fc in response.function_calls:
+                        self.logger.info(f"  - {fc.name}({fc.arguments})")
+                
+                self.logger.info("=" * 80)
                 
                 # Add LLM response to conversation
                 assistant_message = Message(
@@ -363,6 +401,7 @@ Use the available tools to gather information and build a comprehensive understa
                     await self._process_function_calls(response.function_calls, conversation)
                 else:
                     # No more tool calls, reasoning is complete
+                    self.logger.info("No more tool calls - reasoning complete")
                     conversation.complete({
                         "final_response": response.content,
                         "reasoning_trace": conversation.reasoning_trace,
@@ -373,6 +412,7 @@ Use the available tools to gather information and build a comprehensive understa
                 
             except Exception as e:
                 self.logger.error(f"Error in reasoning iteration {conversation.current_iteration}: {str(e)}")
+                self.logger.error(f"Exception details:", exc_info=True)
                 conversation.complete({
                     "error": str(e),
                     "partial_result": True,
@@ -382,6 +422,7 @@ Use the available tools to gather information and build a comprehensive understa
         
         # Return final result or timeout result
         if not conversation.is_complete:
+            self.logger.warning(f"Reasoning timed out after {conversation.current_iteration} iterations")
             conversation.complete({
                 "timeout": True,
                 "max_iterations_reached": True,

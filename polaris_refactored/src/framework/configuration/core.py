@@ -34,12 +34,19 @@ class PolarisConfiguration:
         # Initialize logger
         self.logger = logging.getLogger("polaris.infrastructure.configuration")
         
-        # Load initial configuration - use try-except for async handling
+        # Load initial configuration synchronously to ensure it's available immediately
+        # This is important because the framework needs the config before starting
+        import asyncio
         try:
             loop = asyncio.get_running_loop()
-            asyncio.create_task(self._load_configuration())
+            # If there's a running loop, we need to load synchronously in a new loop
+            # to avoid blocking issues
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, self._load_configuration())
+                future.result(timeout=30)  # Wait up to 30 seconds for config to load
         except RuntimeError:
-            # No running event loop, schedule async configuration loading later
+            # No running event loop, run synchronously
             asyncio.run(self._load_configuration())
         
         if enable_hot_reload:

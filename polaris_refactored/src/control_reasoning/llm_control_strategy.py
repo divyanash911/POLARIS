@@ -49,8 +49,8 @@ class LLMControlStrategy(ControlStrategy):
             reasoning_context = ReasoningContext(
                 system_id=system_id,
                 current_state=current_state,
-                adaptation_need=adaptation_need,
-                context_data={
+                historical_data=[],
+                system_relationships={
                     "metrics": current_state.get("metrics", {}),
                     "health_status": current_state.get("health_status"),
                     "urgency": adaptation_need.urgency,

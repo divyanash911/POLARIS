@@ -50,23 +50,65 @@ class JSONLogFormatter(LogFormatter):
 
 
 class HumanReadableFormatter(LogFormatter):
-    """Human-readable formatter for development/debugging"""
+    """Human-readable formatter for development/debugging with improved formatting"""
+    
+    # ANSI color codes for terminal output
+    COLORS = {
+        'DEBUG': '\033[36m',     # Cyan
+        'INFO': '\033[32m',      # Green
+        'WARNING': '\033[33m',   # Yellow
+        'ERROR': '\033[31m',     # Red
+        'CRITICAL': '\033[35m',  # Magenta
+        'RESET': '\033[0m'       # Reset
+    }
     
     def format(self, record: Dict[str, Any]) -> str:
-        """Format log record as human-readable string"""
+        """Format log record as human-readable string with improved formatting"""
         timestamp = record.get('timestamp', '')
-        level = record.get('level', '')
+        level = record.get('level', 'INFO')
+        logger_name = record.get('logger', 'unknown')
         message = record.get('message', '')
         correlation_id = record.get('correlation_id', '')
         
-        base_msg = f"[{timestamp}] {level}: {message}"
+        # Format timestamp to be more readable (remove microseconds for cleaner output)
+        if timestamp and 'T' in timestamp:
+            # Convert ISO format to more readable format
+            try:
+                ts_parts = timestamp.split('T')
+                date_part = ts_parts[0]
+                time_part = ts_parts[1].split('.')[0] if '.' in ts_parts[1] else ts_parts[1].split('Z')[0]
+                timestamp = f"{date_part} {time_part}"
+            except:
+                pass
+        
+        # Shorten logger name for readability
+        short_logger = logger_name.split('.')[-1] if '.' in logger_name else logger_name
+        if len(short_logger) > 25:
+            short_logger = short_logger[:22] + "..."
+        
+        # Build the base message with aligned columns
+        # Format: [TIME] LEVEL    [LOGGER] Message
+        level_padded = f"{level:<8}"
+        logger_padded = f"[{short_logger:<25}]"
+        
+        base_msg = f"[{timestamp}] {level_padded} {logger_padded} {message}"
         
         if correlation_id:
-            base_msg += f" [correlation_id={correlation_id}]"
+            base_msg += f" (cid={correlation_id[:8]})"
             
+        # Add extra fields on new lines for readability if present
         if record.get('extra'):
-            extra_str = ', '.join(f"{k}={v}" for k, v in record['extra'].items())
-            base_msg += f" [{extra_str}]"
+            extra = record['extra']
+            # Format extra fields nicely
+            extra_lines = []
+            for k, v in extra.items():
+                # Truncate long values
+                v_str = str(v)
+                if len(v_str) > 100:
+                    v_str = v_str[:97] + "..."
+                extra_lines.append(f"    {k}: {v_str}")
+            if extra_lines:
+                base_msg += "\n" + "\n".join(extra_lines)
             
         return base_msg
 

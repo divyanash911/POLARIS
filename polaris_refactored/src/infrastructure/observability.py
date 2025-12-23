@@ -264,7 +264,7 @@ class PolarisJSONFormatter(logging.Formatter):
 
 
 def configure_logging(config: Any) -> None:
-    """Configure logging from config."""
+    """Configure logging from config with dual formatters: human-readable for console, JSON for file."""
     import logging.config
     
     level = getattr(config, 'level', 'INFO')
@@ -277,27 +277,24 @@ def configure_logging(config: Any) -> None:
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
     
-    # Define formatters based on format type
-    if format_type.lower() == 'json':
-        formatter = PolarisJSONFormatter()
-    else:
-        # Text formatter (default) - handles structured logging properly
-        formatter = PolarisTextFormatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    
     # Configure handlers based on output setting
     handlers = []
     
+    # Console handler - always use human-readable text format
     if output in ['console', 'both']:
         console_handler = logging.StreamHandler()
-        console_handler.setFormatter(formatter)
+        console_formatter = PolarisTextFormatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        console_handler.setFormatter(console_formatter)
         handlers.append(console_handler)
     
+    # File handler - always use JSON format for detailed structured logging
     if output in ['file', 'both'] and file_path:
         try:
             from pathlib import Path
             Path(file_path).parent.mkdir(parents=True, exist_ok=True)
             file_handler = logging.FileHandler(file_path)
-            file_handler.setFormatter(formatter)
+            file_formatter = PolarisJSONFormatter()
+            file_handler.setFormatter(file_formatter)
             handlers.append(file_handler)
         except Exception as e:
             print(f"Warning: Could not create file handler for {file_path}: {e}")

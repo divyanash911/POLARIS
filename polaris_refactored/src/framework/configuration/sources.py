@@ -53,6 +53,9 @@ class YAMLConfigurationSource(ConfigurationSource):
             with open(self.file_path, 'r', encoding='utf-8') as f:
                 config = yaml.safe_load(f) or {}
             
+            # Substitute environment variables in the config
+            config = self._substitute_env_vars(config)
+            
             # Update cache
             self._cached_config = config
             self._last_modified = self.file_path.stat().st_mtime
@@ -71,6 +74,27 @@ class YAMLConfigurationSource(ConfigurationSource):
                 config_path=str(self.file_path),
                 validation_errors=[str(e)]
             )
+    
+    def _substitute_env_vars(self, obj: Any) -> Any:
+        """Recursively substitute ${VAR_NAME} patterns with environment variable values."""
+        import re
+        
+        if isinstance(obj, str):
+            # Match ${VAR_NAME} pattern
+            pattern = r'\$\{([^}]+)\}'
+            matches = re.findall(pattern, obj)
+            
+            for var_name in matches:
+                env_value = os.environ.get(var_name, '')
+                obj = obj.replace(f'${{{var_name}}}', env_value)
+            
+            return obj
+        elif isinstance(obj, dict):
+            return {k: self._substitute_env_vars(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [self._substitute_env_vars(item) for item in obj]
+        else:
+            return obj
     
     def get_priority(self) -> int:
         """Get the priority of this configuration source."""

@@ -591,6 +591,12 @@ class GoogleClient(LLMClient):
     
     async def generate_response(self, request: LLMRequest) -> LLMResponse:
         """Generate response using Google AI API."""
+        correlation_id = str(uuid.uuid4())
+        
+        self.logger.info("=" * 60)
+        self.logger.info(f"GOOGLE GEMINI API CALL - {correlation_id}")
+        self.logger.info("=" * 60)
+        
         headers = {
             "Content-Type": "application/json"
         }
@@ -665,24 +671,86 @@ class GoogleClient(LLMClient):
             if function_declarations:
                 data["tools"] = [{"functionDeclarations": function_declarations}]
         
-        # Construct URL with API key
+        # Construct URL with API key (mask key in logs)
         url = f"{self.config.api_endpoint}/v1beta/models/{request.model_name}:generateContent"
-        if "?" in url:
-            url += f"&key={self.config.api_key}"
-        else:
-            url += f"?key={self.config.api_key}"
+        url_with_key = url + f"?key={self.config.api_key}"
+        
+        # Log request details
+        self.logger.info(f"API Endpoint: {url}")
+        self.logger.info(f"Model: {request.model_name}")
+        self.logger.info(f"Messages Count: {len(contents)}")
+        self.logger.info(f"Has System Instruction: {system_instruction is not None}")
+        self.logger.info(f"Tools Count: {len(data.get('tools', [{}])[0].get('functionDeclarations', [])) if data.get('tools') else 0}")
+        self.logger.info(f"Generation Config: maxTokens={request.max_tokens}, temp={request.temperature}")
+        
+        # Log message contents (truncated)
+        for i, content in enumerate(contents):
+            role = content.get("role", "unknown")
+            parts = content.get("parts", [])
+            text_preview = ""
+            for part in parts:
+                if "text" in part:
+                    text_preview = part["text"][:200] + "..." if len(part["text"]) > 200 else part["text"]
+                    break
+            self.logger.info(f"  Message {i} [{role}]: {text_preview}")
+        
+        self.logger.info("-" * 40)
+        self.logger.info("Sending HTTP POST request to Gemini API...")
+        
+        start_time = time.time()
         
         try:
             response_data = await self._make_request(
                 method="POST",
-                url=url,
+                url=url_with_key,
                 headers=headers,
                 data=data
             )
             
+            duration = time.time() - start_time
+            
+            # Log response details
+            self.logger.info("=" * 60)
+            self.logger.info(f"GOOGLE GEMINI API RESPONSE - {correlation_id}")
+            self.logger.info("=" * 60)
+            self.logger.info(f"Response Time: {duration:.2f}s")
+            self.logger.info(f"Response Keys: {list(response_data.keys())}")
+            
+            # Log usage metadata
+            usage_metadata = response_data.get("usageMetadata", {})
+            self.logger.info(f"Token Usage: prompt={usage_metadata.get('promptTokenCount', 0)}, "
+                           f"completion={usage_metadata.get('candidatesTokenCount', 0)}, "
+                           f"total={usage_metadata.get('totalTokenCount', 0)}")
+            
+            # Log candidates
+            candidates = response_data.get("candidates", [])
+            self.logger.info(f"Candidates Count: {len(candidates)}")
+            
+            if candidates:
+                candidate = candidates[0]
+                finish_reason = candidate.get("finishReason", "UNKNOWN")
+                self.logger.info(f"Finish Reason: {finish_reason}")
+                
+                content_parts = candidate.get("content", {}).get("parts", [])
+                self.logger.info(f"Content Parts: {len(content_parts)}")
+                
+                for i, part in enumerate(content_parts):
+                    if "text" in part:
+                        text_preview = part["text"][:500] + "..." if len(part["text"]) > 500 else part["text"]
+                        self.logger.info(f"  Part {i} [text]: {text_preview}")
+                    elif "functionCall" in part:
+                        fc = part["functionCall"]
+                        self.logger.info(f"  Part {i} [functionCall]: {fc.get('name')}({fc.get('args', {})})")
+            
+            self.logger.info("=" * 60)
+            
             return self._parse_google_response(response_data, request.request_id)
             
         except Exception as e:
+            duration = time.time() - start_time
+            self.logger.error(f"GOOGLE GEMINI API ERROR - {correlation_id}")
+            self.logger.error(f"Error after {duration:.2f}s: {str(e)}")
+            
             if isinstance(e, (LLMAPIError, LLMTimeoutError, LLMRateLimitError)):
                 raise
             raise LLMAPIError(

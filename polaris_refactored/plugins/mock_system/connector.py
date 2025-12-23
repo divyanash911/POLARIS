@@ -140,9 +140,29 @@ class MockSystemConnector(ManagedSystemConnector):
     async def collect_metrics(self) -> Dict[str, MetricValue]:
         """Collect current metrics from the mock system.
         
+        Metrics are normalized to a 0-1 scale for system-agnostic processing:
+        - cpu_usage: 0-100% -> 0-1
+        - memory_usage: 0-8192 MB -> 0-1 (assuming 8GB max)
+        - response_time: 0-2000 ms -> 0-1 (2s max)
+        - throughput: 0-100 req/s -> 0-1
+        - error_rate: 0-100% -> 0-1
+        - active_connections: 0-200 -> 0-1
+        - capacity: 1-10 -> 0-1
+        
         Returns:
-            Dict[str, MetricValue]: Dictionary of metric name to metric value
+            Dict[str, MetricValue]: Dictionary of metric name to normalized metric value
         """
+        # Normalization configuration: metric_name -> (max_value, unit_description)
+        METRIC_NORMALIZATION = {
+            "cpu_usage": (100.0, "percentage"),        # 0-100% -> 0-1
+            "memory_usage": (8192.0, "MB"),            # 0-8GB -> 0-1
+            "response_time": (2000.0, "ms"),           # 0-2000ms -> 0-1
+            "throughput": (100.0, "req/s"),            # 0-100 req/s -> 0-1
+            "error_rate": (100.0, "percentage"),       # 0-100% -> 0-1
+            "active_connections": (200.0, "count"),    # 0-200 -> 0-1
+            "capacity": (10.0, "scale"),               # 1-10 -> 0-1
+        }
+        
         try:
             response = await self._send_command("get_metrics")
             status, data, message = self._parse_response(response)
@@ -154,23 +174,47 @@ class MockSystemConnector(ManagedSystemConnector):
             metrics = {}
             timestamp = datetime.now(timezone.utc)
             
-            # Convert response data to MetricValue objects
+            # Convert response data to MetricValue objects with normalization
             for metric_name, metric_data in data.items():
                 if isinstance(metric_data, dict):
-                    metrics[metric_name] = MetricValue(
-                        name=metric_data.get("name", metric_name),
-                        value=metric_data.get("value", 0),
-                        unit=metric_data.get("unit"),
-                        timestamp=timestamp,
-                        tags=metric_data.get("tags", {})
-                    )
+                    raw_value = metric_data.get("value", 0)
+                    original_unit = metric_data.get("unit")
                 else:
-                    # Handle simple value format
-                    metrics[metric_name] = MetricValue(
-                        name=metric_name,
-                        value=metric_data,
-                        timestamp=timestamp
-                    )
+                    raw_value = metric_data
+                    original_unit = None
+                
+                # Normalize the value
+                if metric_name in METRIC_NORMALIZATION:
+                    max_val, unit_desc = METRIC_NORMALIZATION[metric_name]
+                    normalized_value = min(1.0, max(0.0, raw_value / max_val))
+                    unit = "normalized"
+                    tags = {
+                        "raw_value": raw_value,
+                        "max_value": max_val,
+                        "original_unit": unit_desc
+                    }
+                else:
+                    # Unknown metric - pass through as-is
+                    normalized_value = raw_value
+                    unit = original_unit
+                    tags = {"raw_value": raw_value}
+                
+                metrics[metric_name] = MetricValue(
+                    name=metric_name,
+                    value=normalized_value,
+                    unit=unit,
+                    timestamp=timestamp,
+                    tags=tags
+                )
+                
+                self.logger.debug(
+                    f"Metric normalized: {metric_name}",
+                    extra={
+                        "raw_value": raw_value,
+                        "normalized_value": normalized_value,
+                        "max_value": METRIC_NORMALIZATION.get(metric_name, (None,))[0]
+                    }
+                )
             
             return metrics
             

@@ -34,6 +34,17 @@ from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, field
 from enum import Enum
 
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    # Load .env from the script directory (polaris_refactored/)
+    env_path = Path(__file__).parent / ".env"
+    if env_path.exists():
+        load_dotenv(dotenv_path=env_path, override=True)
+        print(f"Loaded environment variables from {env_path}")
+except ImportError:
+    print("Warning: python-dotenv not installed. Environment variables from .env will not be loaded.")
+
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
@@ -153,24 +164,40 @@ class PolarisFrameworkManager:
             self.state = FrameworkState.STARTING
             self.config_path = config_path
             
-            # Configure logging first
+            # Ensure logs directory exists
+            logs_dir = Path(__file__).parent / "logs"
+            logs_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Load configuration first to get logging settings
+            from framework.configuration.utils import load_configuration_from_file
+            configuration = load_configuration_from_file(config_path)
+            
+            # Get framework config with logging settings
+            framework_config = configuration.get_framework_config()
+            
+            # Configure logging from config file (not hardcoded)
             from infrastructure.observability import configure_logging, get_framework_logger, LogLevel
             from framework.configuration.models import LoggingConfiguration
             
-            # Convert string log level to LogLevel enum
-            log_level_enum = LogLevel[log_level.upper()] if isinstance(log_level, str) else log_level
+            # Use logging config from YAML, but allow CLI override for log level
+            log_config = framework_config.logging_config
+            if log_level.upper() != "INFO":  # CLI override takes precedence
+                log_config = LoggingConfiguration(
+                    level=log_level.upper(),
+                    format=log_config.format,
+                    output=log_config.output,
+                    file_path=log_config.file_path,
+                    max_file_size=log_config.max_file_size,
+                    backup_count=log_config.backup_count
+                )
             
-            log_config = LoggingConfiguration(level=log_level, format="text", output="console")
             configure_logging(log_config)
             self.logger = get_framework_logger("manager")
             
             self.logger.info(f"Initializing POLARIS framework with config: {config_path}")
-            
-            # Load configuration
-            from framework.configuration import ConfigurationBuilder
-            from framework.configuration.utils import load_configuration_from_file
-            
-            configuration = load_configuration_from_file(config_path)
+            self.logger.info(f"Logging configured: level={log_config.level}, format={log_config.format}, output={log_config.output}")
+            if log_config.file_path:
+                self.logger.info(f"Log file: {log_config.file_path}")
             
             # Initialize DI container and components
             from infrastructure.di import DIContainer
@@ -181,6 +208,9 @@ class PolarisFrameworkManager:
             from framework.polaris_framework import PolarisFramework
             from infrastructure.observability import ObservabilityConfig
             
+            # Convert string log level to LogLevel enum
+            log_level_enum = LogLevel[log_config.level.upper()]
+            
             container = DIContainer()
             message_bus = PolarisMessageBus()
             data_store = DataStoreFactory.create_in_memory_store()
@@ -188,7 +218,6 @@ class PolarisFrameworkManager:
             event_bus = PolarisEventBus()
             
             # Get observability config
-            framework_config = configuration.get_framework_config()
             obs_config = ObservabilityConfig(
                 service_name=getattr(framework_config, 'service_name', 'polaris'),
                 log_level=log_level_enum
@@ -205,7 +234,15 @@ class PolarisFrameworkManager:
                 observability_config=obs_config
             )
             
+            # Initialize metrics exporter for persistence
+            from infrastructure.observability.metrics import get_metrics_collector, JSONFileMetricsExporter
+            self._metrics_exporter = JSONFileMetricsExporter(
+                file_path=str(logs_dir / "metrics.jsonl")
+            )
+            self._metrics_collector = get_metrics_collector()
+            
             self.logger.info("Framework initialized successfully")
+            self.logger.info(f"Metrics will be exported to: {logs_dir / 'metrics.jsonl'}")
             return True
             
         except Exception as e:
@@ -301,12 +338,44 @@ class PolarisFrameworkManager:
         
         self.logger.info("Framework running. Press Ctrl+C to stop.")
         
+        # Start periodic metrics export task
+        metrics_export_task = asyncio.create_task(self._periodic_metrics_export())
+        
         try:
             await self._shutdown_event.wait()
         except asyncio.CancelledError:
             pass
+        finally:
+            # Cancel metrics export task
+            metrics_export_task.cancel()
+            try:
+                await metrics_export_task
+            except asyncio.CancelledError:
+                pass
+            
+            # Final metrics export before shutdown
+            if hasattr(self, '_metrics_exporter') and hasattr(self, '_metrics_collector'):
+                self._metrics_exporter.export_to_file(self._metrics_collector._metrics)
+                self.logger.info("Final metrics exported before shutdown")
         
         await self.stop()
+    
+    async def _periodic_metrics_export(self):
+        """Periodically export metrics to file."""
+        export_interval = 60  # Export every 60 seconds
+        
+        while True:
+            try:
+                await asyncio.sleep(export_interval)
+                
+                if hasattr(self, '_metrics_exporter') and hasattr(self, '_metrics_collector'):
+                    self._metrics_exporter.export_to_file(self._metrics_collector._metrics)
+                    self.logger.debug(f"Metrics exported to file")
+                    
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                self.logger.warning(f"Failed to export metrics: {e}")
     
     def _signal_handler(self):
         """Handle shutdown signals."""

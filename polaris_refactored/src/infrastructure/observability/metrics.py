@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from threading import Lock
 from typing import Any, Dict, List, Optional, Union
 from datetime import datetime, timedelta
@@ -469,6 +470,75 @@ class MetricsExporter(ABC):
     def export(self, metrics: Dict[str, Metric]) -> str:
         """Export metrics in the target format"""
         pass
+
+
+class JSONFileMetricsExporter(MetricsExporter):
+    """JSON file metrics exporter for persistence"""
+    
+    def __init__(self, file_path: str = "./logs/metrics.json"):
+        self.file_path = Path(file_path)
+        self.file_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    def export(self, metrics: Dict[str, Metric]) -> str:
+        """Export metrics in JSON format"""
+        import json
+        from datetime import datetime, timezone
+        
+        export_data = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "metrics": {}
+        }
+        
+        for name, metric in metrics.items():
+            metric_data = {
+                "description": metric.description,
+                "type": metric.get_type().value
+            }
+            
+            if isinstance(metric, (Counter, Gauge)):
+                value = metric.get_value()
+                metric_data["value"] = value.value
+                metric_data["labels"] = value.labels
+                
+            elif isinstance(metric, Histogram):
+                value = metric.get_value()
+                metric_data["value"] = value.value
+                metric_data["labels"] = value.labels
+            
+            export_data["metrics"][name] = metric_data
+        
+        return json.dumps(export_data, indent=2, default=str)
+    
+    def export_to_file(self, metrics: Dict[str, Metric]) -> None:
+        """Export metrics to JSON file with append mode for history"""
+        import json
+        from datetime import datetime, timezone
+        
+        export_data = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "metrics": {}
+        }
+        
+        for name, metric in metrics.items():
+            metric_data = {
+                "type": metric.get_type().value
+            }
+            
+            if isinstance(metric, (Counter, Gauge)):
+                value = metric.get_value()
+                metric_data["value"] = value.value
+                metric_data["labels"] = value.labels
+                
+            elif isinstance(metric, Histogram):
+                value = metric.get_value()
+                metric_data["value"] = value.value
+                metric_data["labels"] = value.labels
+            
+            export_data["metrics"][name] = metric_data
+        
+        # Append to file (one JSON object per line for easy parsing)
+        with open(self.file_path, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(export_data, default=str) + '\n')
 
 
 class PrometheusExporter(MetricsExporter):
