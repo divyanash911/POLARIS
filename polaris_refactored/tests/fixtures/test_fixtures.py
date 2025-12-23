@@ -16,7 +16,7 @@ from .mock_objects import (
     DataBuilder, MockComponentFactory, TestScenarioBuilder
 )
 
-from src.domain.models import SystemState, AdaptationAction
+from domain.models import SystemState, AdaptationAction
 from src.infrastructure.di import DIContainer
 
 
@@ -312,7 +312,7 @@ def capture_traces(mock_tracer):
 @pytest.fixture(params=["healthy", "degraded", "unhealthy"])
 def system_health_status(request):
     """Parametrized fixture for different system health statuses."""
-    from src.domain.models import HealthStatus
+    from domain.models import HealthStatus
     status_map = {
         "healthy": HealthStatus.HEALTHY,
         "degraded": HealthStatus.DEGRADED,
@@ -324,7 +324,7 @@ def system_health_status(request):
 @pytest.fixture(params=["success", "failed", "timeout"])
 def execution_status(request):
     """Parametrized fixture for different execution statuses."""
-    from src.domain.models import ExecutionStatus
+    from domain.models import ExecutionStatus
     status_map = {
         "success": ExecutionStatus.SUCCESS,
         "failed": ExecutionStatus.FAILED,

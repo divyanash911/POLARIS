@@ -18,7 +18,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Dict, Any, List
 
-from src.domain.models import (
+from domain.models import (
     MetricValue, SystemState, AdaptationAction, 
     ExecutionResult, HealthStatus, ExecutionStatus
 )

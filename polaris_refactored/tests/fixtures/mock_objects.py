@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 import json
 
-from src.domain.models import (
+from domain.models import (
     SystemState, AdaptationAction, ExecutionResult,
     MetricValue, HealthStatus, ExecutionStatus
 )

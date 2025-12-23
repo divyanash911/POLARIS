@@ -20,7 +20,7 @@ from src.control_reasoning.threshold_reactive_strategy import (
     ThresholdCondition, ThresholdOperator, LogicalOperator
 )
 from src.control_reasoning.adaptive_controller import AdaptationNeed
-from src.domain.models import AdaptationAction
+from domain.models import AdaptationAction
 
 
 

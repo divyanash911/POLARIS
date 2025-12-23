@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Type, Optional
 from unittest.mock import patch
 
 from src.domain.interfaces import ManagedSystemConnector
-from src.domain.models import AdaptationAction, ExecutionResult, ExecutionStatus, MetricValue
+from domain.models import AdaptationAction, ExecutionResult, ExecutionStatus, MetricValue
 from tests.fixtures.mock_objects import DataBuilder
 
 

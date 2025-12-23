@@ -15,7 +15,7 @@ from tests.integration.harness.polaris_integration_test_harness import (
     create_simple_harness, create_performance_harness, create_failure_testing_harness
 )
 from tests.fixtures.mock_objects import TestDataBuilder
-from src.domain.models import MetricValue, HealthStatus, ExecutionStatus
+from domain.models import MetricValue, HealthStatus, ExecutionStatus
 
 
 class TestBasicWorkflows:

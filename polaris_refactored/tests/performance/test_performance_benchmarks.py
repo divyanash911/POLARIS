@@ -15,7 +15,7 @@ from tests.performance.polaris_performance_test_suite import (
 )
 from tests.integration.harness.polaris_integration_test_harness import create_performance_harness
 from tests.fixtures.mock_objects import DataBuilder
-from src.domain.models import MetricValue
+from domain.models import MetricValue
 
 
 class TestTelemetryPerformance:

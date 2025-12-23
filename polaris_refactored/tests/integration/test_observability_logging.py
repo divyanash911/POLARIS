@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 from unittest.mock import Mock, patch
 
-from src.domain.models import (
+from domain.models import (
     MetricValue, SystemState, AdaptationAction, 
     ExecutionResult, HealthStatus, ExecutionStatus
 )

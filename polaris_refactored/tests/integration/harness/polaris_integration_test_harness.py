@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 import yaml
 
 from src.domain.interfaces import ManagedSystemConnector
-from src.domain.models import (
+from domain.models import (
     SystemState, AdaptationAction,
     ExecutionResult, HealthStatus, 
     ExecutionStatus, MetricValue

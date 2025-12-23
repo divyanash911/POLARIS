@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, List, Optional, Type, Union
 from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
-from src.domain.models import SystemState, ExecutionResult
+from domain.models import SystemState, ExecutionResult
 
 
 class TestAssertions:

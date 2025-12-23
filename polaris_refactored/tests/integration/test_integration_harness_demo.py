@@ -17,7 +17,7 @@ from tests.integration.contracts.managed_system_connector_contract import (
     MockManagedSystemConnectorContractTest, validate_connector_contract
 )
 from tests.fixtures.mock_objects import MockManagedSystemConnector, DataBuilder
-from src.domain.models import MetricValue, ExecutionStatus
+from domain.models import MetricValue, ExecutionStatus
 
 
 class TestIntegrationHarness:

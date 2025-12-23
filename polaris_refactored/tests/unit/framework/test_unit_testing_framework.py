@@ -14,7 +14,7 @@ from tests.fixtures.test_fixtures import *
 from tests.fixtures.mock_objects import *
 from tests.utils.test_helpers import TestAssertions, AsyncTestHelper, MockHelper, PerformanceTestHelper
 
-from src.domain.models import SystemState, AdaptationAction, ExecutionResult, HealthStatus, ExecutionStatus
+from domain.models import SystemState, AdaptationAction, ExecutionResult, HealthStatus, ExecutionStatus
 from src.framework.events import TelemetryEvent
 
 class TestMockObjects:
