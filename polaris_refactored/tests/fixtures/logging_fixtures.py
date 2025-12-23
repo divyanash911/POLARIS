@@ -8,6 +8,7 @@ with proper setup, teardown, and assertion capabilities.
 import pytest
 import tempfile
 import json
+import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from unittest.mock import Mock, patch
@@ -28,13 +29,29 @@ from framework.configuration.models import LoggingConfiguration
 class TestLogHandler(LogHandler):
     """Test log handler that captures log records for assertions."""
     
-    def __init__(self, formatter: LogFormatter):
+    def __init__(self, formatter: Optional[LogFormatter] = None):
         super().__init__(formatter)
         self.records: List[Dict[str, Any]] = []
+        # Add compatibility attributes for standard logging.Handler
+        self.level = logging.DEBUG
     
     def emit(self, record: Dict[str, Any]) -> None:
         """Capture log record for testing."""
-        self.records.append(record.copy())
+        try:
+            # POLARIS custom logging system passes dict records
+            if isinstance(record, dict):
+                self.records.append(record.copy())
+            else:
+                # Fallback for any other record types
+                self.records.append({
+                    'level': getattr(record, 'levelname', 'UNKNOWN'),
+                    'message': str(record),
+                    'timestamp': getattr(record, 'created', None)
+                })
+        except Exception as e:
+            # Silently handle errors to not break logging
+            print(f"Logging handler failed: {e}")
+            pass
     
     def clear(self) -> None:
         """Clear captured records."""
@@ -61,32 +78,54 @@ class TestLogHandler(LogHandler):
 class LogCapture:
     """Context manager for capturing logs during tests."""
     
-    def __init__(self, logger: PolarisLogger, level: LogLevel = LogLevel.DEBUG):
+    def __init__(self, logger, level="DEBUG"):
         self.logger = logger
-        self.level = level
+        self.level = level if isinstance(level, str) else level.value
         self.handler = TestLogHandler(JSONLogFormatter())
         self.original_level = None
         self.original_handlers = []
     
     def __enter__(self):
         # Store original state
-        self.original_level = self.logger.level
-        self.original_handlers = self.logger.handlers.copy()
+        self.original_level = getattr(self.logger, 'level', None)
+        # Handle both standard and custom logger
+        if hasattr(self.logger, 'handlers'):
+            self.original_handlers = list(self.logger.handlers) if self.logger.handlers else []
         
-        # Configure for capture
-        self.logger.set_level(self.level)
-        self.logger.handlers.clear()
-        self.logger.add_handler(self.handler)
+        # Configure for capture - try different methods
+        if hasattr(self.logger, 'setLevel'):
+            self.logger.setLevel(self.level)
+        elif hasattr(self.logger, 'set_level'):
+            self.logger.set_level(self.level)
+        
+        # Clear handlers
+        if hasattr(self.logger, 'handlers'):
+            self.logger.handlers = []
+        
+        # Add our handler - try both methods
+        if hasattr(self.logger, 'addHandler'):
+            self.logger.addHandler(self.handler)
+        elif hasattr(self.logger, 'add_handler'):
+            self.logger.add_handler(self.handler)
         
         return self.handler
     
     def __exit__(self, exc_type, exc_val, exc_tb):
         # Restore original state
-        self.logger.handlers.clear()
+        if hasattr(self.logger, 'handlers'):
+            self.logger.handlers = []
+        
         for handler in self.original_handlers:
-            self.logger.add_handler(handler)
+            if hasattr(self.logger, 'addHandler'):
+                self.logger.addHandler(handler)
+            elif hasattr(self.logger, 'add_handler'):
+                self.logger.add_handler(handler)
+        
         if self.original_level:
-            self.logger.set_level(self.original_level)
+            if hasattr(self.logger, 'setLevel'):
+                self.logger.setLevel(self.original_level)
+            elif hasattr(self.logger, 'set_level'):
+                self.logger.set_level(self.original_level)
 
 
 @pytest.fixture

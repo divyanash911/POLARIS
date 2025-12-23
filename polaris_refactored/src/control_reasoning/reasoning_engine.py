@@ -225,7 +225,7 @@ class PolarisReasoningEngine:
         ]
         self.fusion_strategy = fusion_strategy or ResultFusionStrategy()
         self.knowledge_base = knowledge_base
-        self.logger = get_logger(self.__class__.__name__)
+        self.logger = get_logger("polaris.control.reasoning_engine")
     
     async def reason(self, context: ReasoningContext) -> ReasoningResult:
         """Perform reasoning using all available strategies."""

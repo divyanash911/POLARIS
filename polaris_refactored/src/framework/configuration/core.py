@@ -6,6 +6,7 @@ Provides the main configuration class for the POLARIS framework.
 
 import asyncio
 import threading
+import logging
 from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass
 
@@ -30,8 +31,16 @@ class PolarisConfiguration:
         self._hot_reload_thread: Optional[threading.Thread] = None
         self._stop_hot_reload = threading.Event()
         
-        # Load initial configuration
-        asyncio.create_task(self._load_configuration())
+        # Initialize logger
+        self.logger = logging.getLogger("polaris.infrastructure.configuration")
+        
+        # Load initial configuration - use try-except for async handling
+        try:
+            loop = asyncio.get_running_loop()
+            asyncio.create_task(self._load_configuration())
+        except RuntimeError:
+            # No running event loop, schedule async configuration loading later
+            asyncio.run(self._load_configuration())
         
         if enable_hot_reload:
             self._start_hot_reload_monitoring()
@@ -140,7 +149,12 @@ class PolarisConfiguration:
                 except Exception as e:
                     print(f"Error in reload callback: {e}")
 
-        asyncio.create_task(_reload_with_callbacks())
+        try:
+            loop = asyncio.get_running_loop()
+            asyncio.create_task(_reload_with_callbacks())
+        except RuntimeError:
+            # No running event loop, run synchronously
+            asyncio.run(_reload_with_callbacks())
     
     def is_hot_reload_enabled(self) -> bool:
         """Check if hot reload is enabled."""

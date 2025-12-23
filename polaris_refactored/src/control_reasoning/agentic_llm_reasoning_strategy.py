@@ -13,11 +13,12 @@ from datetime import datetime, timezone
 from .reasoning_engine import ReasoningStrategy, ReasoningContext, ReasoningResult
 from infrastructure.llm.client import LLMClient
 from infrastructure.llm.models import (
-    LLMRequest, Message, MessageRole, AgenticConversation, ToolCall
+    LLMRequest, Message, MessageRole, AgenticConversation, ToolCall, PromptTemplate
 )
 from infrastructure.llm.tool_registry import ToolRegistry
 from infrastructure.llm.conversation_manager import ConversationManager
 from infrastructure.llm.prompt_manager import PromptManager
+from infrastructure.llm.response_parser import ResponseParser
 from infrastructure.llm.exceptions import LLMAPIError, LLMToolError
 from infrastructure.observability import (
     get_logger, get_metrics_collector, get_tracer, observe_polaris_component,
@@ -62,8 +63,13 @@ class AgenticLLMReasoningStrategy(ReasoningStrategy):
         # Create tool registry with agentic tools
         self.tool_registry = create_agentic_tool_registry(world_model, knowledge_base)
         
-        # Initialize conversation and prompt managers
-        self.conversation_manager = ConversationManager()
+        # Initialize response parser and conversation manager
+        self.response_parser = ResponseParser()
+        self.conversation_manager = ConversationManager(
+            llm_client=llm_client,
+            tool_registry=self.tool_registry,
+            response_parser=self.response_parser
+        )
         self.prompt_manager = PromptManager()
         
         # Setup logging and observability
@@ -116,8 +122,12 @@ Please analyze this situation step by step:
 Use the available tools to gather information and build a comprehensive understanding of the situation."""
 
         # Register prompts
-        self.prompt_manager.add_template("system_prompt", system_prompt)
-        self.prompt_manager.add_template("analysis_prompt", analysis_prompt)
+        self.prompt_manager.register_template(
+            PromptTemplate(name="system_prompt", template=system_prompt)
+        )
+        self.prompt_manager.register_template(
+            PromptTemplate(name="analysis_prompt", template=analysis_prompt)
+        )
     
     def _register_llm_metrics(self) -> None:
         """Register LLM reasoning specific metrics."""
