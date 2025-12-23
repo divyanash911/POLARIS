@@ -516,7 +516,7 @@ class PolarisFramework(Injectable):
         if hasattr(self, '_subscriptions'):
             for subscription_id in self._subscriptions:
                 try:
-                    self.event_bus.unsubscribe(subscription_id)
+                    await self.event_bus.unsubscribe(subscription_id)
                     self.logger.info(f"Unsubscribed event handler: {subscription_id}")
                 except Exception as e:
                     self.logger.error(f"Error unsubscribing {subscription_id}: {e}")
@@ -689,12 +689,26 @@ class PolarisFramework(Injectable):
                 raw_config = self.configuration.get_raw_config()
                 llm_config = raw_config.get("llm", {})
                 
-                if llm_config.get("provider") != "mock":
+                if llm_config.get("provider") and llm_config.get("provider") != "mock":
                     from control_reasoning.agentic_llm_reasoning_strategy import AgenticLLMReasoningStrategy
-                    from infrastructure.llm.client import LLMClient
+                    from infrastructure.llm.client_factory import LLMClientFactory
+                    from infrastructure.llm.models import LLMConfiguration, LLMProvider
                     
-                    # Create LLM client
-                    llm_client = LLMClient(llm_config)
+                    # Create LLM configuration from raw config
+                    provider_str = llm_config.get("provider", "openai").upper()
+                    llm_provider = LLMProvider[provider_str] if provider_str in LLMProvider.__members__ else LLMProvider.OPENAI
+                    
+                    llm_configuration = LLMConfiguration(
+                        provider=llm_provider,
+                        api_key=llm_config.get("api_key", ""),
+                        api_endpoint=llm_config.get("api_endpoint", ""),
+                        model_name=llm_config.get("model_name", "gpt-4"),
+                        timeout=llm_config.get("timeout", 60),
+                        max_retries=llm_config.get("max_retries", 3)
+                    )
+                    
+                    # Create LLM client using factory
+                    llm_client = LLMClientFactory.create_client(llm_configuration)
                     
                     # Add LLM reasoning strategy
                     llm_strategy = AgenticLLMReasoningStrategy(
@@ -705,7 +719,7 @@ class PolarisFramework(Injectable):
                     strategies.append(llm_strategy)
                     self.logger.info("Added LLM reasoning strategy to reasoning engine")
                 else:
-                    self.logger.info("LLM provider is mock, skipping LLM reasoning strategy")
+                    self.logger.info("LLM provider is mock or not configured, skipping LLM reasoning strategy")
                     
             except Exception as e:
                 self.logger.warning(f"Could not add LLM reasoning strategy: {e}")

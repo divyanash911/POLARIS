@@ -173,7 +173,13 @@ class PolarisLogger:
             LogLevel.ERROR: 3,
             LogLevel.CRITICAL: 4
         }
-        return level_order[level] >= level_order[self.level]
+        
+        # Ensure self.level is a LogLevel enum
+        current_level = self.level
+        if isinstance(current_level, str):
+            current_level = LogLevel[current_level.upper()]
+        
+        return level_order[level] >= level_order[current_level]
     
     def _create_log_record(self, level: LogLevel, message: str, extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Create a structured log record"""

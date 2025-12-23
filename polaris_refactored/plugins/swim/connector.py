@@ -12,8 +12,8 @@ import time
 from typing import Any, Dict, Optional, List
 from datetime import datetime, timezone
 
-from src.domain.interfaces import ManagedSystemConnector
-from src.domain.models import (
+from domain.interfaces import ManagedSystemConnector
+from domain.models import (
     SystemState, AdaptationAction, ExecutionResult, MetricValue, HealthStatus, ExecutionStatus
 )
 
