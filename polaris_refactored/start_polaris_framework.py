@@ -131,6 +131,7 @@ class FrameworkStatus:
     managed_systems: Dict[str, Dict[str, Any]]
     recent_adaptations: List[AdaptationEvent]
     metrics_summary: Dict[str, MetricsSnapshot]
+    meta_learner_enabled: bool = False
 
 
 # ============================================================================
@@ -320,7 +321,8 @@ class PolarisFrameworkManager:
             components=components,
             managed_systems=managed_systems,
             recent_adaptations=self._adaptation_history[-10:],
-            metrics_summary={s.system_id: s for s in self._metrics_history[-5:]}
+            metrics_summary={s.system_id: s for s in self._metrics_history[-5:]},
+            meta_learner_enabled=status.get("meta_learner_enabled", False)
         )
     
     async def run_until_shutdown(self):
@@ -540,60 +542,70 @@ class ObservabilityDashboard:
         ops = ManagedSystemOperations(self.manager)
         end_time = time.time() + duration
         
+        self._print_dashboard_header(duration)
+        
+        try:
+            while time.time() < end_time:
+                self._clear_screen()
+                await self._render_dashboard(system_id, ops)
+                await asyncio.sleep(self.refresh_interval)
+                
+        except KeyboardInterrupt:
+            print("\n\nMetrics display stopped.")
+
+    def _print_dashboard_header(self, duration: int):
         print("\n" + "=" * 70)
         print("POLARIS Live Metrics Dashboard")
         print("=" * 70)
         print(f"Refresh interval: {self.refresh_interval}s | Duration: {duration}s")
         print("Press Ctrl+C to stop\n")
+
+    def _clear_screen(self):
+        # Clear screen (cross-platform)
+        os.system('cls' if os.name == 'nt' else 'clear')
+
+    async def _render_dashboard(self, system_id: Optional[str], ops: ManagedSystemOperations):
+        print(BANNER)
+        print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print("-" * 70)
         
-        try:
-            while time.time() < end_time:
-                # Clear screen (cross-platform)
-                os.system('cls' if os.name == 'nt' else 'clear')
-                
-                print(BANNER)
-                print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-                print("-" * 70)
-                
-                # Get framework status
-                status = self.manager.get_status()
-                print(f"Framework State: {status.state.value.upper()}")
-                print(f"Uptime: {self._format_uptime(status.uptime_seconds)}")
-                print(f"Active Components: {len(status.components)}")
-                print("-" * 70)
-                
-                # Get metrics for each system
-                systems = await ops.list_systems()
-                target_systems = [s for s in systems if s['enabled']]
-                
-                if system_id:
-                    target_systems = [s for s in target_systems 
-                                     if s['system_id'] == system_id]
-                
-                for sys_info in target_systems:
-                    sid = sys_info['system_id']
-                    print(f"\n📊 System: {sid} ({sys_info['connector_type']})")
-                    print("-" * 40)
-                    
-                    metrics_data = await ops.collect_metrics(sid)
-                    
-                    if "error" in metrics_data:
-                        print(f"  ⚠️  Error: {metrics_data['error']}")
-                    else:
-                        metrics = metrics_data.get("metrics", {})
-                        for name, data in metrics.items():
-                            value = data.get('value', 'N/A')
-                            unit = data.get('unit', '')
-                            bar = self._create_bar(value) if isinstance(value, (int, float)) else ""
-                            print(f"  {name:25} {value:>10} {unit:5} {bar}")
-                
-                print("\n" + "-" * 70)
-                print("Press Ctrl+C to stop")
-                
-                await asyncio.sleep(self.refresh_interval)
-                
-        except KeyboardInterrupt:
-            print("\n\nMetrics display stopped.")
+        # Get framework status
+        status = self.manager.get_status()
+        print(f"Framework State: {status.state.value.upper()}")
+        print(f"Uptime: {self._format_uptime(status.uptime_seconds)}")
+        print(f"Active Components: {len(status.components)}")
+        print("-" * 70)
+        
+        # Get metrics for each system
+        systems = await ops.list_systems()
+        target_systems = [s for s in systems if s['enabled']]
+        
+        if system_id:
+            target_systems = [s for s in target_systems 
+                             if s['system_id'] == system_id]
+        
+        for sys_info in target_systems:
+            await self._render_system_metrics(sys_info, ops)
+        
+        print("\n" + "-" * 70)
+        print("Press Ctrl+C to stop")
+
+    async def _render_system_metrics(self, sys_info: Dict[str, Any], ops: ManagedSystemOperations):
+        sid = sys_info['system_id']
+        print(f"\n📊 System: {sid} ({sys_info['connector_type']})")
+        print("-" * 40)
+        
+        metrics_data = await ops.collect_metrics(sid)
+        
+        if "error" in metrics_data:
+            print(f"  ⚠️  Error: {metrics_data['error']}")
+        else:
+            metrics = metrics_data.get("metrics", {})
+            for name, data in metrics.items():
+                value = data.get('value', 'N/A')
+                unit = data.get('unit', '')
+                bar = self._create_bar(value) if isinstance(value, (int, float)) else ""
+                print(f"  {name:25} {value:>10} {unit:5} {bar}")
     
     def _format_uptime(self, seconds: float) -> str:
         """Format uptime in human-readable format."""
@@ -747,6 +759,7 @@ class InteractiveShell:
         "config": "Show current configuration",
         "dashboard [duration]": "Show live metrics dashboard",
         "history": "Show adaptation history",
+        "meta-learner": "Check meta learner status",
         "quit": "Exit the shell"
     }
     
@@ -783,51 +796,85 @@ class InteractiveShell:
     async def _process_command(self, cmd_input: str):
         """Process a shell command."""
         parts = cmd_input.split()
+        if not parts:
+            return
+
         cmd = parts[0].lower()
         args = parts[1:]
         
-        if cmd == "help":
-            self._show_help()
-        elif cmd == "quit" or cmd == "exit":
-            self.running = False
-        elif cmd == "status":
-            await self._show_status()
-        elif cmd == "systems":
-            await self._list_systems()
-        elif cmd == "metrics":
-            if args:
-                await self._show_metrics(args[0])
-            else:
-                print("Usage: metrics <system_id>")
-        elif cmd == "action":
-            if len(args) >= 2:
-                params = {}
-                if len(args) > 2:
-                    # Parse key=value params
-                    for arg in args[2:]:
-                        if "=" in arg:
-                            k, v = arg.split("=", 1)
-                            try:
-                                params[k] = json.loads(v)
-                            except json.JSONDecodeError:
-                                params[k] = v
-                await self._execute_action(args[0], args[1], params)
-            else:
-                print("Usage: action <system_id> <action_type> [key=value ...]")
-        elif cmd == "actions":
-            if args:
-                await self._list_actions(args[0])
-            else:
-                print("Usage: actions <system_id>")
-        elif cmd == "config":
-            self._show_config()
-        elif cmd == "dashboard":
-            duration = int(args[0]) if args else 60
-            await self.dashboard.display_live_metrics(duration=duration)
-        elif cmd == "history":
-            await self.dashboard.show_adaptation_history()
+        handlers = {
+            "help": self._handle_help,
+            "quit": self._handle_quit,
+            "exit": self._handle_quit,
+            "status": self._handle_status,
+            "systems": self._handle_systems,
+            "metrics": self._handle_metrics,
+            "action": self._handle_action,
+            "actions": self._handle_actions,
+            "config": self._handle_config,
+            "dashboard": self._handle_dashboard,
+            "history": self._handle_history,
+            "meta-learner": self._handle_meta_learner
+        }
+        
+        handler = handlers.get(cmd)
+        if handler:
+            await handler(args)
         else:
             print(f"Unknown command: {cmd}. Type 'help' for available commands.")
+
+    async def _handle_help(self, args):
+        self._show_help()
+
+    async def _handle_quit(self, args):
+        self.running = False
+
+    async def _handle_status(self, args):
+        await self._show_status()
+
+    async def _handle_systems(self, args):
+        await self._list_systems()
+
+    async def _handle_metrics(self, args):
+        if args:
+            await self._show_metrics(args[0])
+        else:
+            print("Usage: metrics <system_id>")
+
+    async def _handle_action(self, args):
+        if len(args) >= 2:
+            params = {}
+            if len(args) > 2:
+                # Parse key=value params
+                for arg in args[2:]:
+                    if "=" in arg:
+                        k, v = arg.split("=", 1)
+                        try:
+                            params[k] = json.loads(v)
+                        except json.JSONDecodeError:
+                            params[k] = v
+            await self._execute_action(args[0], args[1], params)
+        else:
+            print("Usage: action <system_id> <action_type> [key=value ...]")
+
+    async def _handle_actions(self, args):
+        if args:
+            await self._list_actions(args[0])
+        else:
+            print("Usage: actions <system_id>")
+
+    async def _handle_config(self, args):
+        self._show_config()
+
+    async def _handle_dashboard(self, args):
+        duration = int(args[0]) if args else 60
+        await self.dashboard.display_live_metrics(duration=duration)
+
+    async def _handle_history(self, args):
+        await self.dashboard.show_adaptation_history()
+
+    async def _handle_meta_learner(self, args):
+        await self._show_meta_learner_status()
     
     def _show_help(self):
         """Show help message."""
@@ -843,7 +890,22 @@ class InteractiveShell:
         print(f"\nFramework State: {status.state.value.upper()}")
         print(f"Uptime: {status.uptime_seconds:.1f} seconds")
         print(f"Components: {', '.join(status.components) or 'None'}")
+        print(f"Meta Learner: {'Enabled' if status.meta_learner_enabled else 'Disabled'}")
         print(f"Managed Systems: {', '.join(status.managed_systems.keys()) or 'None'}")
+        
+    async def _show_meta_learner_status(self):
+        """Show meta learner detailed status."""
+        status = self.manager.get_status()
+        if not status.meta_learner_enabled:
+            print("Meta Learner is NOT enabled.")
+            return
+            
+        print("\nMeta Learner Status")
+        print("=" * 50)
+        print("Status: Active (Background Analysis)")
+        # In a full implementation, we would fetch more details from the meta learner component
+        # like last analysis time, next scheduled run, etc.
+        print("Use 'history' to see if any governance reports have been generated.")
     
     async def _list_systems(self):
         """List managed systems."""

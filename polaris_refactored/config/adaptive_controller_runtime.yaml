@@ -1,0 +1,130 @@
+# Adaptive Controller Runtime Configuration
+# ===========================================
+# This file is the control interface between the Meta Learner and the Adaptive Controller.
+# The Meta Learner can modify controller behavior by updating values in this file.
+# Changes are detected automatically via hot-reload.
+#
+# Location: config/adaptive_controller_runtime.yaml
+# DO NOT MOVE - This is a fixed location used by the meta learner interface.
+
+version: 1
+last_updated: "2026-01-01T06:00:00Z"
+updated_by: "system"
+
+# =============================================================================
+# Threshold Configuration
+# =============================================================================
+# These thresholds determine when adaptation actions are triggered.
+# The meta learner can adjust these based on observed system behavior.
+
+thresholds:
+  # CPU utilization thresholds
+  cpu_high: 80.0          # Scale up when CPU > this value (%)
+  cpu_low: 20.0           # Scale down when CPU < this value (%)
+  cpu_critical: 95.0      # Emergency action threshold (%)
+  
+  # Memory utilization thresholds  
+  memory_high: 85.0       # High memory warning (%)
+  memory_critical: 95.0   # Critical memory threshold (%)
+  
+  # Response time thresholds
+  response_time_warning_ms: 200.0    # Warning threshold (milliseconds)
+  response_time_critical_ms: 500.0   # Critical threshold (milliseconds)
+  
+  # Error rate thresholds
+  error_rate_warning_pct: 5.0        # Warning threshold (%)
+  error_rate_critical_pct: 10.0      # Critical threshold (%)
+  
+  # Throughput thresholds
+  throughput_low: 10.0               # Low throughput warning (req/s)
+
+# =============================================================================
+# Strategy Configuration
+# =============================================================================
+# Weights for strategy selection and behavior tuning.
+
+strategy_weights:
+  reactive: 1.0           # ThresholdReactiveStrategy weight
+  predictive: 0.8         # PredictiveControlStrategy weight
+  learning: 0.6           # LearningControlStrategy weight
+
+strategy_params:
+  # Reactive strategy parameters
+  reactive:
+    severity_multiplier: 1.0
+    enable_multi_metric: true
+    
+  # Predictive strategy parameters
+  predictive:
+    prediction_horizon_minutes: 5
+    confidence_threshold: 0.7
+    
+  # Learning strategy parameters
+  learning:
+    similarity_threshold: 0.8
+    pattern_weight: 0.7
+
+# =============================================================================
+# Cooldown Configuration
+# =============================================================================
+# Minimum time between actions to prevent oscillation.
+
+cooldowns:
+  default_seconds: 60.0           # Default cooldown for any action
+  scale_up_seconds: 30.0          # Faster cooldown for scaling up (urgent)
+  scale_down_seconds: 120.0       # Slower cooldown for scaling down (cautious)
+  restart_seconds: 300.0          # Long cooldown for service restarts
+  config_change_seconds: 180.0    # Cooldown for configuration changes
+  emergency_override: false       # If true, ignore cooldowns for critical events
+
+# =============================================================================
+# Action Limits
+# =============================================================================
+# Bounds on adaptation actions to prevent runaway behavior.
+
+limits:
+  max_concurrent_actions: 5       # Maximum actions in parallel
+  max_scale_factor: 3             # Maximum scale multiplier per action
+  min_capacity: 1                 # Minimum system capacity
+  max_capacity: 20                # Maximum system capacity
+  max_actions_per_hour: 30        # Rate limit on total actions
+  
+# =============================================================================
+# Feature Toggles
+# =============================================================================
+# Enable/disable specific adaptation features.
+
+features:
+  enable_predictive: true                 # Use world model predictions
+  enable_learning: true                   # Use learned patterns from KB
+  enable_enhanced_assessment: true        # Enhanced adaptation assessment
+  enable_multi_metric_evaluation: true    # Evaluate multiple metrics together
+  enable_action_prioritization: true      # Prioritize actions by severity
+  enable_fallback_actions: true           # Fallback when primary action fails
+
+# =============================================================================
+# Meta Learner Integration
+# =============================================================================
+# Settings for meta learner interaction with this configuration.
+
+meta_learner:
+  # Which fields the meta learner is allowed to modify
+  writable_fields:
+    - "thresholds.*"
+    - "strategy_weights.*"
+    - "cooldowns.*"
+    - "limits.max_concurrent_actions"
+    - "limits.max_actions_per_hour"
+    - "features.*"
+  
+  # Validation constraints
+  constraints:
+    thresholds:
+      min: 0.0
+      max: 100.0
+    cooldowns:
+      min: 10.0
+      max: 3600.0
+    limits:
+      max_capacity_max: 100
+      min_capacity_min: 1

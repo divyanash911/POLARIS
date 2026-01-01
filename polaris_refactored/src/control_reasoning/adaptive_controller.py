@@ -8,13 +8,114 @@ This is a simplified implementation for the SWIM system demo.
 import logging
 import time
 import asyncio
+import os
+import threading
+from pathlib import Path
 from typing import List, Dict, Any, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from abc import ABC, abstractmethod
+from datetime import datetime, timezone
+
+import yaml
 
 from domain.models import AdaptationAction
 from framework.events import TelemetryEvent
 from infrastructure.observability import get_logger
+
+# Fixed path for runtime configuration - used by Meta Learner interface
+RUNTIME_CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "adaptive_controller_runtime.yaml"
+
+
+@dataclass
+class RuntimeConfig:
+    """Runtime configuration loaded from external YAML file.
+    
+    This config can be modified by the Meta Learner to adjust controller behavior.
+    """
+    # Thresholds
+    cpu_high: float = 80.0
+    cpu_low: float = 20.0
+    cpu_critical: float = 95.0
+    memory_high: float = 85.0
+    memory_critical: float = 95.0
+    response_time_warning_ms: float = 200.0
+    response_time_critical_ms: float = 500.0
+    error_rate_warning_pct: float = 5.0
+    error_rate_critical_pct: float = 10.0
+    throughput_low: float = 10.0
+    
+    # Strategy weights
+    strategy_weights: Dict[str, float] = field(default_factory=lambda: {
+        "reactive": 1.0, "predictive": 0.8, "learning": 0.6
+    })
+    
+    # Cooldowns
+    default_cooldown_seconds: float = 60.0
+    scale_up_cooldown_seconds: float = 30.0
+    scale_down_cooldown_seconds: float = 120.0
+    restart_cooldown_seconds: float = 300.0
+    emergency_override: bool = False
+    
+    # Limits
+    max_concurrent_actions: int = 5
+    max_scale_factor: int = 3
+    min_capacity: int = 1
+    max_capacity: int = 20
+    max_actions_per_hour: int = 30
+    
+    # Features
+    enable_predictive: bool = True
+    enable_learning: bool = True
+    enable_enhanced_assessment: bool = True
+    enable_multi_metric_evaluation: bool = True
+    enable_action_prioritization: bool = True
+    enable_fallback_actions: bool = True
+    
+    # Metadata
+    version: int = 1
+    last_updated: str = ""
+    updated_by: str = "system"
+    
+    @classmethod
+    def from_yaml(cls, yaml_data: Dict[str, Any]) -> "RuntimeConfig":
+        """Create RuntimeConfig from parsed YAML data."""
+        thresholds = yaml_data.get("thresholds", {})
+        cooldowns = yaml_data.get("cooldowns", {})
+        limits = yaml_data.get("limits", {})
+        features = yaml_data.get("features", {})
+        
+        return cls(
+            cpu_high=thresholds.get("cpu_high", 80.0),
+            cpu_low=thresholds.get("cpu_low", 20.0),
+            cpu_critical=thresholds.get("cpu_critical", 95.0),
+            memory_high=thresholds.get("memory_high", 85.0),
+            memory_critical=thresholds.get("memory_critical", 95.0),
+            response_time_warning_ms=thresholds.get("response_time_warning_ms", 200.0),
+            response_time_critical_ms=thresholds.get("response_time_critical_ms", 500.0),
+            error_rate_warning_pct=thresholds.get("error_rate_warning_pct", 5.0),
+            error_rate_critical_pct=thresholds.get("error_rate_critical_pct", 10.0),
+            throughput_low=thresholds.get("throughput_low", 10.0),
+            strategy_weights=yaml_data.get("strategy_weights", {"reactive": 1.0, "predictive": 0.8, "learning": 0.6}),
+            default_cooldown_seconds=cooldowns.get("default_seconds", 60.0),
+            scale_up_cooldown_seconds=cooldowns.get("scale_up_seconds", 30.0),
+            scale_down_cooldown_seconds=cooldowns.get("scale_down_seconds", 120.0),
+            restart_cooldown_seconds=cooldowns.get("restart_seconds", 300.0),
+            emergency_override=cooldowns.get("emergency_override", False),
+            max_concurrent_actions=limits.get("max_concurrent_actions", 5),
+            max_scale_factor=limits.get("max_scale_factor", 3),
+            min_capacity=limits.get("min_capacity", 1),
+            max_capacity=limits.get("max_capacity", 20),
+            max_actions_per_hour=limits.get("max_actions_per_hour", 30),
+            enable_predictive=features.get("enable_predictive", True),
+            enable_learning=features.get("enable_learning", True),
+            enable_enhanced_assessment=features.get("enable_enhanced_assessment", True),
+            enable_multi_metric_evaluation=features.get("enable_multi_metric_evaluation", True),
+            enable_action_prioritization=features.get("enable_action_prioritization", True),
+            enable_fallback_actions=features.get("enable_fallback_actions", True),
+            version=yaml_data.get("version", 1),
+            last_updated=yaml_data.get("last_updated", ""),
+            updated_by=yaml_data.get("updated_by", "system"),
+        )
 
 
 @dataclass
@@ -236,6 +337,9 @@ class LearningControlStrategy(ControlStrategy):
 class PolarisAdaptiveController:
     """
     Main adaptive controller that coordinates multiple control strategies.
+    
+    The controller loads runtime configuration from an external YAML file
+    that can be modified by the Meta Learner to adjust behavior.
     """
     
     def __init__(
@@ -247,12 +351,29 @@ class PolarisAdaptiveController:
         enable_pid_strategy: bool = False,
         pid_config: Optional[Dict[str, Any]] = None,
         enable_enhanced_assessment: bool = True,
+        runtime_config_path: Optional[Path] = None,
+        enable_config_watch: bool = True,
     ):
         self.control_strategies = control_strategies or []
         self.world_model = world_model
         self.knowledge_base = knowledge_base
         self.event_bus = event_bus
         self.logger = get_logger(self.__class__.__name__)
+        
+        # Runtime configuration from external YAML
+        self._runtime_config_path = runtime_config_path or RUNTIME_CONFIG_PATH
+        self._runtime_config: RuntimeConfig = RuntimeConfig()  # Default values
+        self._config_lock = threading.Lock()
+        self._config_mtime: float = 0.0
+        self._config_watch_enabled = enable_config_watch
+        self._config_watch_task: Optional[asyncio.Task] = None
+        
+        # Load initial runtime config
+        self._load_runtime_config()
+        
+        # Override enable_enhanced_assessment from runtime config if loaded
+        if self._runtime_config:
+            enable_enhanced_assessment = self._runtime_config.enable_enhanced_assessment
         
         # Initialize enhanced assessment if enabled
         self.enable_enhanced_assessment = enable_enhanced_assessment
@@ -289,6 +410,99 @@ class PolarisAdaptiveController:
         # Add default strategies if none provided
         if not self.control_strategies:
             self.control_strategies.append(ReactiveControlStrategy())
+    
+    # -------------------------------------------------------------------------
+    # Runtime Configuration Management
+    # -------------------------------------------------------------------------
+    
+    def _load_runtime_config(self) -> bool:
+        """Load runtime configuration from external YAML file.
+        
+        Returns:
+            True if config was loaded successfully, False otherwise.
+        """
+        try:
+            if not self._runtime_config_path.exists():
+                self.logger.warning(f"Runtime config not found at {self._runtime_config_path}, using defaults")
+                return False
+            
+            # Check if file has been modified
+            current_mtime = self._runtime_config_path.stat().st_mtime
+            if current_mtime == self._config_mtime:
+                return False  # No changes
+            
+            with open(self._runtime_config_path, 'r', encoding='utf-8') as f:
+                yaml_data = yaml.safe_load(f) or {}
+            
+            with self._config_lock:
+                self._runtime_config = RuntimeConfig.from_yaml(yaml_data)
+                self._config_mtime = current_mtime
+            
+            self.logger.info(
+                f"Loaded runtime config v{self._runtime_config.version} "
+                f"(updated: {self._runtime_config.last_updated}, by: {self._runtime_config.updated_by})"
+            )
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to load runtime config: {e}")
+            return False
+    
+    def get_runtime_config(self) -> RuntimeConfig:
+        """Get current runtime configuration (thread-safe)."""
+        with self._config_lock:
+            return self._runtime_config
+    
+    def reload_config(self) -> bool:
+        """Force reload of runtime configuration.
+        
+        Call this method after the Meta Learner updates the config file.
+        """
+        if self._load_runtime_config():
+            self.logger.info("Runtime config reloaded successfully")
+            return True
+        return False
+    
+    async def _watch_config_changes(self) -> None:
+        """Background task to watch for config file changes."""
+        while self._config_watch_enabled:
+            try:
+                if self._load_runtime_config():
+                    # Config was updated - emit event if event bus is available
+                    if self.event_bus:
+                        try:
+                            from framework.events import SystemEvent
+                            event = SystemEvent(
+                                event_type="config_reloaded",
+                                source="adaptive_controller",
+                                data={"config_path": str(self._runtime_config_path)}
+                            )
+                            await self.event_bus.publish(event)
+                        except Exception:
+                            pass  # Event publishing is optional
+                            
+            except Exception as e:
+                self.logger.error(f"Error watching config: {e}")
+            
+            await asyncio.sleep(5.0)  # Check every 5 seconds
+    
+    def get_threshold(self, name: str) -> float:
+        """Get a threshold value from runtime config."""
+        config = self.get_runtime_config()
+        return getattr(config, name, 0.0)
+    
+    def get_cooldown(self, action_type: str) -> float:
+        """Get cooldown seconds for an action type."""
+        config = self.get_runtime_config()
+        cooldown_map = {
+            "scale_out": config.scale_up_cooldown_seconds,
+            "scale_up": config.scale_up_cooldown_seconds,
+            "scale_in": config.scale_down_cooldown_seconds,
+            "scale_down": config.scale_down_cooldown_seconds,
+            "restart": config.restart_cooldown_seconds,
+            "restart_service": config.restart_cooldown_seconds,
+        }
+        return cooldown_map.get(action_type, config.default_cooldown_seconds)
             
     async def select_control_strategy(self, system_id: str, context: Dict[str, Any]) -> ControlStrategy:
         """Select the most appropriate control strategy for the given context."""
@@ -454,8 +668,26 @@ class PolarisAdaptiveController:
     
     async def start(self) -> None:
         """Start the adaptive controller."""
+        # Load latest config
+        self._load_runtime_config()
+        
+        # Start config watcher if enabled
+        if self._config_watch_enabled:
+            self._config_watch_task = asyncio.create_task(self._watch_config_changes())
+            self.logger.info("Config file watcher started")
+        
         self.logger.info("Adaptive controller started")
     
     async def stop(self) -> None:
         """Stop the adaptive controller."""
+        # Stop config watcher
+        self._config_watch_enabled = False
+        if self._config_watch_task and not self._config_watch_task.done():
+            self._config_watch_task.cancel()
+            try:
+                await self._config_watch_task
+            except asyncio.CancelledError:
+                pass
+            self.logger.info("Config file watcher stopped")
+        
         self.logger.info("Adaptive controller stopped")

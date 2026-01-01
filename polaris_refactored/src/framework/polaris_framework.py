@@ -82,11 +82,12 @@ class PolarisFramework(Injectable):
             return
         
         try:
-            # Configure BOTH logging systems FIRST, before any other operations
+            # Configure logging using the framework configuration
+            # This handles both standard logging and POLARIS structured logging
             try:
                 framework_config = self.configuration.get_framework_config()
                 
-                # Configure standard Python logging
+                # Configure logging only once
                 configure_logging(framework_config.logging_config)
                 
                 # Configure POLARIS structured logging system
@@ -122,6 +123,9 @@ class PolarisFramework(Injectable):
             
             # Start control and reasoning components
             await self._start_control_reasoning()
+            
+            # Start meta learner
+            await self._start_meta_learner()
             
             # Start adapter components
             await self._start_adapters()
@@ -165,6 +169,7 @@ class PolarisFramework(Injectable):
             
             # Stop components in reverse order
             await self._stop_adapters()
+            await self._stop_meta_learner()
             await self._stop_control_reasoning()
             await self._stop_digital_twin()
             await self._stop_framework_services()
@@ -212,7 +217,8 @@ class PolarisFramework(Injectable):
             "components": self._components.copy(),
             "configuration_loaded": self.configuration is not None,
             "message_bus_connected": hasattr(self.message_bus, '_connected') and self.message_bus._connected,
-            "data_store_connected": hasattr(self.data_store, '_connected') and self.data_store._connected
+            "data_store_connected": hasattr(self.data_store, '_connected') and self.data_store._connected,
+            "meta_learner_enabled": "meta_learner" in self._components
         }
     
     async def _start_infrastructure(self) -> None:
@@ -669,6 +675,40 @@ class PolarisFramework(Injectable):
             self.logger.warning("Falling back to default threshold strategy")
             return [self._create_threshold_strategy()]
     
+    def _create_llm_client(self):
+        """Create LLM client based on configuration."""
+        try:
+            raw_config = self.configuration.get_raw_config()
+            llm_config = raw_config.get("llm", {})
+            
+            if not llm_config.get("provider") or llm_config.get("provider") == "mock":
+                return None
+                
+            from infrastructure.llm.client_factory import LLMClientFactory
+            from infrastructure.llm.models import LLMConfiguration, LLMProvider
+            
+            # Create LLM configuration from raw config
+            provider_str = llm_config.get("provider", "openai").upper()
+            llm_provider = LLMProvider[provider_str] if provider_str in LLMProvider.__members__ else LLMProvider.OPENAI
+            
+            llm_configuration = LLMConfiguration(
+                provider=llm_provider,
+                api_key=llm_config.get("api_key", ""),
+                api_endpoint=llm_config.get("api_endpoint", ""),
+                model_name=llm_config.get("model_name", "gpt-4"),
+                max_tokens=llm_config.get("max_tokens", 4096),
+                temperature=llm_config.get("temperature", 0.1),
+                timeout=llm_config.get("timeout", 60),
+                max_retries=llm_config.get("max_retries", 3)
+            )
+            
+            # Create LLM client using factory
+            return LLMClientFactory.create_client(llm_configuration)
+            
+        except Exception as e:
+            self.logger.warning(f"Error creating LLM client: {e}")
+            return None
+
     def _create_reasoning_engine(self, knowledge_base, world_model):
         """Create reasoning engine with appropriate strategies."""
         try:
@@ -686,31 +726,10 @@ class PolarisFramework(Injectable):
             
             # Try to add LLM reasoning strategy if LLM is configured
             try:
-                raw_config = self.configuration.get_raw_config()
-                llm_config = raw_config.get("llm", {})
+                llm_client = self._create_llm_client()
                 
-                if llm_config.get("provider") and llm_config.get("provider") != "mock":
+                if llm_client:
                     from control_reasoning.agentic_llm_reasoning_strategy import AgenticLLMReasoningStrategy
-                    from infrastructure.llm.client_factory import LLMClientFactory
-                    from infrastructure.llm.models import LLMConfiguration, LLMProvider
-                    
-                    # Create LLM configuration from raw config
-                    provider_str = llm_config.get("provider", "openai").upper()
-                    llm_provider = LLMProvider[provider_str] if provider_str in LLMProvider.__members__ else LLMProvider.OPENAI
-                    
-                    llm_configuration = LLMConfiguration(
-                        provider=llm_provider,
-                        api_key=llm_config.get("api_key", ""),
-                        api_endpoint=llm_config.get("api_endpoint", ""),
-                        model_name=llm_config.get("model_name", "gpt-4"),
-                        max_tokens=llm_config.get("max_tokens", 4096),
-                        temperature=llm_config.get("temperature", 0.1),
-                        timeout=llm_config.get("timeout", 60),
-                        max_retries=llm_config.get("max_retries", 3)
-                    )
-                    
-                    # Create LLM client using factory
-                    llm_client = LLMClientFactory.create_client(llm_configuration)
                     
                     # Add LLM reasoning strategy
                     llm_strategy = AgenticLLMReasoningStrategy(
@@ -739,6 +758,90 @@ class PolarisFramework(Injectable):
             # Fallback to basic reasoning engine
             from control_reasoning.reasoning_engine import PolarisReasoningEngine
             return PolarisReasoningEngine(knowledge_base=knowledge_base)
+            
+    async def _start_meta_learner(self) -> None:
+        """Start meta learner component."""
+        self.logger.debug("Starting meta learner...")
+        
+        try:
+            from meta_learner.llm_meta_learner import LLMMetaLearner
+            from control_reasoning.adaptive_controller import PolarisAdaptiveController
+            from digital_twin.knowledge_base import PolarisKnowledgeBase
+            
+            # Check if enabled in config
+            raw_config = self.configuration.get_raw_config()
+            meta_config = raw_config.get("meta_learner", {})
+            
+            # Get dependencies
+            knowledge_base = self.container.resolve(PolarisKnowledgeBase)
+            adaptive_controller = self.container.resolve(PolarisAdaptiveController)
+            
+            # Create LLM client
+            llm_client = self._create_llm_client()
+            
+            if not llm_client:
+                self.logger.info("LLM client not available, skipping meta learner startup")
+                return
+                
+            # Create meta learner
+            # Resolve config paths relative to the main configuration file if possible, or project root
+            # We assume the standard project structure where config is at the root level matching src
+            # or adjacent to framework config
+            
+            # Try to find the project root based on this file's location: src/framework/polaris_framework.py -> root
+            project_root = Path(__file__).parent.parent.parent.resolve()
+            config_dir = project_root / "config"
+            
+            # Fallback checks
+            if not config_dir.exists():
+                 # Try finding it relative to CWD
+                 if (Path.cwd() / "config").exists():
+                     config_dir = Path.cwd() / "config"
+            
+            meta_learner_config = config_dir / "meta_learner_config.yaml"
+            controller_config = config_dir / "adaptive_controller_runtime.yaml"
+            
+            if not meta_learner_config.exists():
+                self.logger.warning(f"Meta learner config not found at {meta_learner_config}")
+                # Don't return, let it try default or fail gracefully in component
+            
+            meta_learner = LLMMetaLearner(
+                component_id="polaris_meta_learner",
+                config_path=str(meta_learner_config),
+                llm_client=llm_client,
+                knowledge_base=knowledge_base,
+                adaptive_controller=adaptive_controller,
+                controller_config_path=controller_config
+            )
+            self.container.register_singleton(LLMMetaLearner, meta_learner)
+            
+            # Start meta learner (activates background loop if configured)
+            await meta_learner.start()
+            
+            self._components.append("meta_learner")
+            self.logger.info("Meta learner started successfully")
+            
+        except ImportError:
+            self.logger.warning("Meta learner module not available")
+        except Exception as e:
+            self.logger.warning(f"Failed to start meta learner: {e}")
+
+    async def _stop_meta_learner(self) -> None:
+        """Stop meta learner component."""
+        self.logger.debug("Stopping meta learner...")
+        
+        try:
+            from meta_learner.llm_meta_learner import LLMMetaLearner
+            meta_learner = self.container.resolve(LLMMetaLearner)
+            if meta_learner:
+                await meta_learner.stop()
+        except Exception:
+            pass # Component might not explicitly exist or be resolvable if failed start
+            
+        if "meta_learner" in self._components:
+            self._components.remove("meta_learner")
+            
+        self.logger.debug("Meta learner stopped")
     
     async def _stop_adapters(self) -> None:
         """Stop adapter layer components."""

@@ -75,6 +75,7 @@ python verify_tests.py
 - **Threshold Reactive**: Rule-based adaptation with configurable thresholds
 - **Agentic LLM Reasoning**: Intelligent reasoning using Google AI (Gemini)
 - **LLM World Model**: Natural language system behavior understanding
+- **Autonomous Meta-Learning**: Higher-level governance loop optimizing controller configuration
 - **Hybrid Approaches**: Combine multiple strategies for optimal adaptation
 
 ### Testing Infrastructure
@@ -319,6 +320,7 @@ See [TESTING_GUIDE.md](TESTING_GUIDE.md) for complete CI/CD examples.
 - **[TEST_SETUP_SUMMARY.md](TEST_SETUP_SUMMARY.md)** - Test infrastructure overview
 - **[README_SWIM_SYSTEM.md](README_SWIM_SYSTEM.md)** - SWIM system setup guide
 - **[tests/README.md](tests/README.md)** - Test infrastructure details
+- **[doc/15-meta-learner.md](doc/15-meta-learner.md)** - Meta-Learning Subsystem Documentation
 
 ## Examples
 
