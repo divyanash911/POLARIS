@@ -87,12 +87,15 @@ class PolarisFramework(Injectable):
             try:
                 framework_config = self.configuration.get_framework_config()
                 
-                # Configure logging only once
-                configure_logging(framework_config.logging_config)
+                # Configure POLARIS structured logging system if not already configured
+                from infrastructure.observability.factory import configure_logging as configure_polaris_logging, is_logging_configured
                 
-                # Configure POLARIS structured logging system
-                from infrastructure.observability.factory import configure_logging as configure_polaris_logging
-                configure_polaris_logging(framework_config.logging_config)
+                if not is_logging_configured():
+                    # Configure logging only once
+                    configure_logging(framework_config.logging_config)
+                    configure_polaris_logging(framework_config.logging_config)
+                else:
+                    self.logger.debug("Logging already configured, skipping re-configuration")
                 
                 # Now we can safely use the logger
                 self.logger = get_framework_logger("main")

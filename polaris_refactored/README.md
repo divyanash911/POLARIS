@@ -315,12 +315,14 @@ See [TESTING_GUIDE.md](TESTING_GUIDE.md) for complete CI/CD examples.
 
 ## Documentation
 
+- **[CLI_REFERENCE.md](doc/CLI_REFERENCE.md)** - **Command Line Interface Reference** (New!)
 - **[TESTING_GUIDE.md](TESTING_GUIDE.md)** - Comprehensive testing documentation
 - **[TESTING_QUICKREF.md](TESTING_QUICKREF.md)** - Quick command reference
 - **[TEST_SETUP_SUMMARY.md](TEST_SETUP_SUMMARY.md)** - Test infrastructure overview
 - **[README_SWIM_SYSTEM.md](README_SWIM_SYSTEM.md)** - SWIM system setup guide
-- **[tests/README.md](tests/README.md)** - Test infrastructure details
+- **[doc/03-getting-started.md](doc/03-getting-started.md)** - Getting Started Guide
 - **[doc/15-meta-learner.md](doc/15-meta-learner.md)** - Meta-Learning Subsystem Documentation
+
 
 ## Examples
 

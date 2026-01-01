@@ -244,50 +244,39 @@ configuration_schema:
 
 ### 4. Run POLARIS
 
-Create `run_demo.py`:
+POLARIS now includes a unified entry point script `start_polaris_framework.py` that handles startup, management, and observability.
 
-```python
-import asyncio
-import logging
-from pathlib import Path
-
-from polaris_refactored.src.framework.polaris_framework import create_polaris_framework
-
-async def main():
-    """Run POLARIS demo."""
-    
-    # Configure logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
-    
-    # Create and start POLARIS framework
-    framework = await create_polaris_framework("config.yaml")
-    
-    try:
-        print("Starting POLARIS framework...")
-        await framework.start()
-        
-        print("POLARIS is running. Press Ctrl+C to stop.")
-        
-        # Keep running until interrupted
-        while True:
-            await asyncio.sleep(1)
-            
-    except KeyboardInterrupt:
-        print("\nShutting down POLARIS...")
-        await framework.stop()
-        print("POLARIS stopped.")
-
-if __name__ == "__main__":
-    asyncio.run(main())
-```
-
-Run the demo:
+#### Start the Framework
 
 ```bash
-python run_demo.py
+# Start with default configuration (mock system)
+python start_polaris_framework.py start
+
+# Start with specific configuration
+python start_polaris_framework.py start --config config/swim_system_config.yaml
+```
+
+#### Interactive Shell
+
+To interact with the running framework, inspect systems, or view the world model:
+
+```bash
+python start_polaris_framework.py shell
+```
+
+Inside the shell, you can run commands like:
+- `systems`: List connected systems.
+- `world-model`: Inspect the Digital Twin.
+- `dashboard`: View real-time metrics.
+
+See [CLI_REFERENCE.md](../doc/CLI_REFERENCE.md) for a complete list of commands.
+
+#### Dashboard
+
+To launch the observability dashboard directly:
+
+```bash
+python start_polaris_framework.py dashboard
 ```
 
 ## Understanding the Output

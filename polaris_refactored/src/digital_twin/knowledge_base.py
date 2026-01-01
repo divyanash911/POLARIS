@@ -344,3 +344,47 @@ class PolarisKnowledgeBase(Injectable):
                     pass
             history.append(entry)
         return history
+
+    async def export_all_data(self) -> Dict[str, Any]:
+        """Export all data from the knowledge base."""
+        # This is a best-effort dump of all repositories
+        data = {
+            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "patterns": [],
+            "dependencies": [],
+            "adaptation_actions": [],
+            # States might be too large, so we might skip or limit them,
+            # but for this request we'll try to include what we can if feasible,
+            # or just skip listing all states to avoid OOM.
+            # Let's include patterns and dependencies as primary "knowledge".
+        }
+
+        # Export Patterns
+        try:
+            patterns = await self._patterns().list_all()
+            data["patterns"] = [self._patterns()._entity_to_dict(p) for p in patterns]
+        except Exception as e:
+            data["patterns_error"] = str(e)
+
+        # Export Dependencies (Graph)
+        # We don't have a direct "list all" for deps usually, but if the repo supports it...
+        # The SystemDependencyRepository doesn't expose list_all directly, but we can query with empty filter if supported.
+        # Check storage backend capability via repo.
+        try:
+            # We'll try to query all dependencies.
+            # Note: Graph backend might not support empty query easily, but let's try.
+            # If not supported, we might need to iterate systems if we knew them.
+            # For now, let's assume query({}) works for the document side of the repository.
+            deps = await self._deps().storage_backend.query("system_dependencies", {})
+            data["dependencies"] = deps
+        except Exception as e:
+             data["dependencies_error"] = str(e)
+
+        # Export Actions
+        try:
+             actions = await self._actions().query({})
+             data["adaptation_actions"] = [self._actions()._entity_to_dict(a) for a in actions]
+        except Exception as e:
+             data["adaptation_actions_error"] = str(e)
+             
+        return data

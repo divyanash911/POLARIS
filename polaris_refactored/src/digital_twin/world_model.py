@@ -72,8 +72,14 @@ class PolarisWorldModel(ABC):
         pass
     
     @abstractmethod
+    @abstractmethod
     async def simulate_adaptation_impact(self, system_id: str, action: Any) -> SimulationResult:
         """Simulate the impact of an adaptation action."""
+        pass
+
+    @abstractmethod
+    def get_model_status(self) -> Dict[str, Any]:
+        """Get the current status and metadata of the world model."""
         pass
 
 
@@ -164,6 +170,15 @@ class CompositeWorldModel(PolarisWorldModel):
         probability = min(1.0, total_weight / max(1.0, len(self.models))) if self.models else 0.0
         return SimulationResult(outcomes, probability)
 
+    def get_model_status(self) -> Dict[str, Any]:
+        """Return status of composite model and its children."""
+        return {
+            "type": "CompositeWorldModel",
+            "model_count": len(self.models),
+            "weights": self.weights,
+            "children": [m.get_model_status() for m in self.models]
+        }
+
 
 class StatisticalWorldModel(PolarisWorldModel):
     """Statistical world model implementation.
@@ -235,6 +250,17 @@ class StatisticalWorldModel(PolarisWorldModel):
         probability = 0.5 if outcomes else 0.0
         return SimulationResult(outcomes, probability)
 
+    def get_model_status(self) -> Dict[str, Any]:
+        """Return status of statistical model."""
+        tracked_systems = len(self._windows)
+        total_metrics = sum(len(m) for m in self._windows.values())
+        return {
+            "type": "StatisticalWorldModel",
+            "window_size": self._window,
+            "tracked_systems": tracked_systems,
+            "total_tracked_metrics": total_metrics
+        }
+
 
 class MLWorldModel(PolarisWorldModel):
     """Machine learning world model implementation.
@@ -267,3 +293,10 @@ class MLWorldModel(PolarisWorldModel):
     async def simulate_adaptation_impact(self, system_id: str, action: Any) -> SimulationResult:
         # Minimal stub simulation: no-op with low probability
         return SimulationResult({}, 0.1)
+
+    def get_model_status(self) -> Dict[str, Any]:
+        return {
+            "type": "MLWorldModel",
+            "status": "Stub",
+            "version": "0.0.1"
+        }
