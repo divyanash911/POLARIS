@@ -16,6 +16,10 @@ from .response_parser import ResponseParser, JSONSchemaValidator, FunctionCallPa
 from .tool_registry import ToolRegistry, BaseTool, ToolSchema, ToolResult
 from .conversation_manager import ConversationManager, Conversation, Message
 from .cache import LLMCache, LLMCacheEntry
+from .rate_limiter import (
+    LLMRateLimiter, RateLimitConfig, RateLimitExceededError,
+    get_rate_limiter, rate_limited
+)
 from .models import (
     LLMConfiguration,
     LLMProvider,
@@ -75,6 +79,13 @@ __all__ = [
     # Caching
     'LLMCache',
     'LLMCacheEntry',
+    
+    # Rate Limiting
+    'LLMRateLimiter',
+    'RateLimitConfig',
+    'RateLimitExceededError',
+    'get_rate_limiter',
+    'rate_limited',
     
     # Models
     'LLMConfiguration',

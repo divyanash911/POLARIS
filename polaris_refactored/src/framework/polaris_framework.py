@@ -7,7 +7,7 @@ observability integration.
 """
 
 import asyncio
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 import logging
 from pathlib import Path
 
@@ -213,7 +213,7 @@ class PolarisFramework(Injectable):
         """Check if the framework is currently running."""
         return self._running
     
-    def get_status(self) -> Dict[str, any]:
+    def get_status(self) -> Dict[str, Any]:
         """Get the current status of the framework and its components."""
         return {
             "running": self._running,
@@ -223,6 +223,95 @@ class PolarisFramework(Injectable):
             "data_store_connected": hasattr(self.data_store, '_connected') and self.data_store._connected,
             "meta_learner_enabled": "meta_learner" in self._components
         }
+    
+    async def get_health(self) -> Dict[str, Any]:
+        """
+        Get aggregated health status of all framework components.
+        
+        Returns a comprehensive health report suitable for Kubernetes
+        liveness/readiness probes and monitoring dashboards.
+        """
+        health_status = {
+            "status": "healthy",
+            "timestamp": __import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat(),
+            "components": {},
+            "checks": {
+                "liveness": True,
+                "readiness": self._running
+            }
+        }
+        
+        component_statuses = []
+        
+        # Check message bus health
+        try:
+            mb_healthy = hasattr(self.message_bus, '_connected') and self.message_bus._connected
+            health_status["components"]["message_bus"] = {
+                "status": "healthy" if mb_healthy else "unhealthy",
+                "connected": mb_healthy
+            }
+            component_statuses.append(mb_healthy)
+        except Exception as e:
+            health_status["components"]["message_bus"] = {"status": "error", "error": str(e)}
+            component_statuses.append(False)
+        
+        # Check data store health
+        try:
+            ds_healthy = hasattr(self.data_store, '_connected') and self.data_store._connected
+            health_status["components"]["data_store"] = {
+                "status": "healthy" if ds_healthy else "unhealthy",
+                "connected": ds_healthy
+            }
+            component_statuses.append(ds_healthy)
+        except Exception as e:
+            health_status["components"]["data_store"] = {"status": "error", "error": str(e)}
+            component_statuses.append(False)
+        
+        # Check event bus health
+        try:
+            eb_healthy = self.event_bus._running if hasattr(self.event_bus, '_running') else False
+            eb_stats = self.event_bus.get_processing_stats() if hasattr(self.event_bus, 'get_processing_stats') else {}
+            health_status["components"]["event_bus"] = {
+                "status": "healthy" if eb_healthy else "unhealthy",
+                "running": eb_healthy,
+                "queue_size": eb_stats.get("queue_size", 0),
+                "events_processed": eb_stats.get("events_processed", 0)
+            }
+            component_statuses.append(eb_healthy)
+        except Exception as e:
+            health_status["components"]["event_bus"] = {"status": "error", "error": str(e)}
+            component_statuses.append(False)
+        
+        # Check adapter health
+        if hasattr(self, '_adapters') and self._adapters:
+            for adapter in self._adapters:
+                try:
+                    adapter_status = adapter.get_status_summary() if hasattr(adapter, 'get_status_summary') else {}
+                    adapter_healthy = adapter_status.get("state") == "running" and adapter_status.get("health_status") in ["healthy", "degraded"]
+                    health_status["components"][f"adapter_{adapter_status.get('adapter_id', 'unknown')}"] = {
+                        "status": "healthy" if adapter_healthy else "degraded" if adapter_status.get("health_status") == "degraded" else "unhealthy",
+                        "state": adapter_status.get("state"),
+                        "metrics": adapter_status.get("metrics", {})
+                    }
+                    component_statuses.append(adapter_healthy)
+                except Exception as e:
+                    health_status["components"]["adapter_unknown"] = {"status": "error", "error": str(e)}
+                    component_statuses.append(False)
+        
+        # Aggregate overall status
+        if not component_statuses:
+            health_status["status"] = "unknown"
+        elif all(component_statuses):
+            health_status["status"] = "healthy"
+        elif any(component_statuses):
+            health_status["status"] = "degraded"
+        else:
+            health_status["status"] = "unhealthy"
+        
+        # Update readiness based on overall health
+        health_status["checks"]["readiness"] = self._running and health_status["status"] in ["healthy", "degraded"]
+        
+        return health_status
     
     async def _start_infrastructure(self) -> None:
         """Start infrastructure layer components."""
@@ -785,6 +874,16 @@ class PolarisFramework(Injectable):
             if not llm_client:
                 self.logger.info("LLM client not available, skipping meta learner startup")
                 return
+            
+            # Get managed system IDs from configuration
+            managed_systems = self.configuration.get_all_managed_systems()
+            managed_system_ids = [
+                sys_id for sys_id, sys_config in managed_systems.items() 
+                if sys_config.enabled
+            ]
+            
+            if not managed_system_ids:
+                self.logger.warning("No enabled managed systems found for meta learner")
                 
             # Create meta learner
             # Resolve config paths relative to the main configuration file if possible, or project root
@@ -814,7 +913,8 @@ class PolarisFramework(Injectable):
                 llm_client=llm_client,
                 knowledge_base=knowledge_base,
                 adaptive_controller=adaptive_controller,
-                controller_config_path=controller_config
+                controller_config_path=controller_config,
+                managed_system_ids=managed_system_ids
             )
             self.container.register_singleton(LLMMetaLearner, meta_learner)
             
@@ -822,7 +922,9 @@ class PolarisFramework(Injectable):
             await meta_learner.start()
             
             self._components.append("meta_learner")
-            self.logger.info("Meta learner started successfully")
+            self.logger.info("Meta learner started successfully", extra={
+                "managed_systems": managed_system_ids
+            })
             
         except ImportError:
             self.logger.warning("Meta learner module not available")

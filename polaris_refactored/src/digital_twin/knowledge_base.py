@@ -56,31 +56,37 @@ class PolarisKnowledgeBase(Injectable):
         
         # Use POLARIS logging
         self.logger = get_digital_twin_logger("knowledge_base")
+        self.logger.info("Knowledge base initialized")
 
     def _states(self) -> SystemStateRepository:
         if self._states_repo is None:
             self._states_repo = self._data_store.get_repository("system_states")  # type: ignore[assignment]
+            self.logger.debug("Initialized system states repository")
         return self._states_repo  # type: ignore[return-value]
 
     def _deps(self) -> SystemDependencyRepository:
         if self._deps_repo is None:
             self._deps_repo = self._data_store.get_repository("system_dependencies")  # type: ignore[assignment]
+            self.logger.debug("Initialized system dependencies repository")
         return self._deps_repo  # type: ignore[return-value]
 
     def _patterns(self) -> LearnedPatternRepository:
         if self._patterns_repo is None:
             self._patterns_repo = self._data_store.get_repository("learned_patterns")  # type: ignore[assignment]
+            self.logger.debug("Initialized learned patterns repository")
         return self._patterns_repo  # type: ignore[return-value]
     
     def _actions(self) -> AdaptationActionRepository:
         if self._actions_repo is None:
             self._actions_repo = self._data_store.get_repository("adaptation_actions")  # type: ignore[assignment]
+            self.logger.debug("Initialized adaptation actions repository")
         return self._actions_repo  # type: ignore[return-value]
     
     def _exec_results(self):
         if self._exec_results_repo is None:
             # Delayed import typing to avoid circulars in type checking
             self._exec_results_repo = self._data_store.get_repository("execution_results")  # type: ignore[assignment]
+            self.logger.debug("Initialized execution results repository")
         return self._exec_results_repo  # type: ignore[return-value]
     
     # Telemetry and State Management
@@ -89,10 +95,20 @@ class PolarisKnowledgeBase(Injectable):
         """Store telemetry data by persisting the included SystemState."""
         state: SystemState = telemetry.system_state
         await self._states().save(state)
+        self.logger.debug("Stored telemetry", extra={
+            "system_id": state.system_id,
+            "health_status": state.health_status.value,
+            "metrics_count": len(state.metrics) if state.metrics else 0
+        })
     
     async def get_current_state(self, system_id: str) -> Optional[SystemState]:
         """Get the current state of a system."""
-        return await self._states().get_current_state(system_id)
+        state = await self._states().get_current_state(system_id)
+        if state:
+            self.logger.debug("Retrieved current state", extra={"system_id": system_id})
+        else:
+            self.logger.debug("No current state found", extra={"system_id": system_id})
+        return state
     
     async def get_historical_states(
         self, 
@@ -101,7 +117,14 @@ class PolarisKnowledgeBase(Injectable):
         end_time: datetime
     ) -> List[SystemState]:
         """Get historical states for a system within a time range."""
-        return await self._states().get_states_in_range(system_id, start_time, end_time)
+        states = await self._states().get_states_in_range(system_id, start_time, end_time)
+        self.logger.debug("Retrieved historical states", extra={
+            "system_id": system_id,
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+            "count": len(states)
+        })
+        return states
     
     # System Relationships (Graph-based)
     
@@ -141,6 +164,11 @@ class PolarisKnowledgeBase(Injectable):
     async def store_learned_pattern(self, pattern: LearnedPattern) -> None:
         """Store a learned pattern."""
         await self._patterns().save(pattern)
+        self.logger.info("Stored learned pattern", extra={
+            "pattern_id": pattern.pattern_id,
+            "pattern_type": pattern.pattern_type,
+            "confidence": pattern.confidence
+        })
     
     async def store_adaptation_actions(self, actions: List["AdaptationAction"]) -> None:
         """Persist planned adaptation actions to the knowledge base.
@@ -150,25 +178,43 @@ class PolarisKnowledgeBase(Injectable):
         """
         try:
             repo = self._actions()
-        except Exception:
+        except Exception as e:
+            self.logger.warning("Failed to get actions repository", extra={"error": str(e)})
             return
+        
+        stored_count = 0
         for a in actions:
             try:
                 await repo.save(a)
-            except Exception:
-                # Best-effort persistence; continue on error
+                stored_count += 1
+            except Exception as e:
+                self.logger.warning("Failed to store adaptation action", extra={
+                    "action_id": a.action_id,
+                    "error": str(e)
+                })
                 continue
+        
+        if stored_count > 0:
+            self.logger.info("Stored adaptation actions", extra={"count": stored_count})
     
     async def store_execution_result(self, result: "ExecutionResult") -> None:
         """Persist an execution result for an adaptation action (best-effort)."""
         try:
             repo = self._exec_results()
-        except Exception:
+        except Exception as e:
+            self.logger.warning("Failed to get execution results repository", extra={"error": str(e)})
             return
         try:
             await repo.save(result)
-        except Exception:
-            return
+            self.logger.info("Stored execution result", extra={
+                "action_id": result.action_id,
+                "status": result.status.value if hasattr(result.status, 'value') else str(result.status)
+            })
+        except Exception as e:
+            self.logger.warning("Failed to store execution result", extra={
+                "action_id": result.action_id,
+                "error": str(e)
+            })
     
     async def query_patterns(
         self, 
@@ -344,6 +390,76 @@ class PolarisKnowledgeBase(Injectable):
                     pass
             history.append(entry)
         return history
+
+    def get_system_info(self, system_id: str) -> Optional[Dict[str, Any]]:
+        """Get system information from the knowledge base.
+        
+        Args:
+            system_id: The system identifier to look up
+            
+        Returns:
+            Dictionary with system information or None if not found
+        """
+        # Try to get the most recent state for this system
+        try:
+            # We need to run this synchronously for the LLM world model context building
+            import asyncio
+            try:
+                loop = asyncio.get_running_loop()
+                # If there's a running loop, we can't use asyncio.run
+                # Return basic info from cached data if available
+                return {
+                    "system_id": system_id,
+                    "info_source": "knowledge_base",
+                    "note": "Full state requires async access"
+                }
+            except RuntimeError:
+                # No running loop, safe to use asyncio.run
+                pass
+        except Exception as e:
+            self.logger.warning(f"Error getting system info: {e}")
+        
+        return {"system_id": system_id, "info_source": "knowledge_base"}
+    
+    async def get_recent_patterns(self, system_id: str, limit: int = 5) -> List[Dict[str, Any]]:
+        """Get recent learned patterns for a system.
+        
+        Args:
+            system_id: The system identifier
+            limit: Maximum number of patterns to return
+            
+        Returns:
+            List of recent patterns as dictionaries
+        """
+        try:
+            # Query patterns that might be relevant to this system
+            all_patterns = await self._patterns().list_all()
+            
+            # Filter patterns that mention this system in conditions or outcomes
+            relevant_patterns = []
+            for pattern in all_patterns:
+                # Check if pattern is relevant to this system
+                conditions_str = str(pattern.conditions).lower()
+                outcomes_str = str(pattern.outcomes).lower()
+                system_id_lower = system_id.lower()
+                
+                if system_id_lower in conditions_str or system_id_lower in outcomes_str:
+                    relevant_patterns.append({
+                        "pattern_id": pattern.pattern_id,
+                        "pattern_type": pattern.pattern_type,
+                        "confidence": pattern.confidence,
+                        "conditions": pattern.conditions,
+                        "outcomes": pattern.outcomes,
+                        "learned_at": pattern.learned_at.isoformat() if pattern.learned_at else None
+                    })
+            
+            # Sort by confidence and return top N
+            relevant_patterns.sort(key=lambda p: p.get("confidence", 0), reverse=True)
+            return relevant_patterns[:limit]
+            
+        except Exception as e:
+            self.logger.warning(f"Error getting recent patterns for {system_id}: {e}")
+            return []
 
     async def export_all_data(self) -> Dict[str, Any]:
         """Export all data from the knowledge base."""

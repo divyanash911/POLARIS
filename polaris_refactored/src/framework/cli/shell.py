@@ -5,7 +5,19 @@ from typing import Dict, Any, List
 
 from .manager import PolarisFrameworkManager, ManagedSystemOperations
 from .dashboard import ObservabilityDashboard
-from .utils import RICH_AVAILABLE, rprint
+from .utils import (
+    RICH_AVAILABLE, rprint, get_console, create_header, 
+    print_warning, print_error, print_success, Table, box
+)
+
+# Import Table and box for rich tables if available
+if RICH_AVAILABLE:
+    try:
+        from rich.table import Table
+        from rich import box
+    except ImportError:
+        Table = None
+        box = None
 
 class InteractiveShell:
     """Interactive shell for POLARIS management."""
@@ -72,17 +84,22 @@ class InteractiveShell:
         if not status.get("systems"):
             print_warning("No managed systems registered.")
             return
-            
-        # Create systems table
-        table = Table(title="Registered Systems", box=box.ROUNDED)
-        table.add_column("System ID", style="cyan", no_wrap=True)
-        table.add_column("Status", style="green")
-        # In a real impl, we'd have more details here
         
-        for sys_id in status["systems"]:
-            table.add_row(sys_id, "ACTIVE")
+        # Use rich table if available, otherwise plain text
+        if RICH_AVAILABLE and Table and box:
+            table = Table(title="Registered Systems", box=box.ROUNDED)
+            table.add_column("System ID", style="cyan", no_wrap=True)
+            table.add_column("Status", style="green")
             
-        console.print(table)
+            for sys_id in status["systems"]:
+                table.add_row(sys_id, "ACTIVE")
+                
+            console.print(table)
+        else:
+            print(f"\nRegistered Systems ({len(status['systems'])}):")
+            for sys_id in status["systems"]:
+                print(f"  🟢 {sys_id} - ACTIVE")
+            print("")
         
     async def cmd_world_model(self, args: List[str]) -> None:
         """Handle world-model command."""
@@ -135,7 +152,7 @@ class InteractiveShell:
             self._show_status()
             
         elif command == "systems":
-            await self.cmd_systems(args) # Updated to call new cmd_systems
+            await self.cmd_systems(args)
             
         elif command == "metrics":
             if not args:
@@ -163,6 +180,18 @@ class InteractiveShell:
                 print("Usage: action <system_id> <action_type> [key=value ...]")
             else:
                 await self._execute_action(args[0], args[1], args[2:])
+
+        elif command == "world-model":
+            await self.cmd_world_model(args)
+            
+        elif command == "meta-learner":
+            await self._show_meta_learner_status()
+            
+        elif command == "export-kb":
+            await self.cmd_export_kb(args)
+            
+        elif command == "config":
+            self._show_config()
 
         else:
             print(f"Unknown command: {command}")
@@ -227,4 +256,35 @@ class InteractiveShell:
         print(f"Executing {action_type} on {system_id} with {params}...")
         result = await self.ops.execute_action(system_id, action_type, params)
         print(f"Result: {result}")
+
+    async def _show_meta_learner_status(self):
+        """Show meta learner status."""
+        status = self.manager.get_status()
+        print("\nMeta Learner Status:")
+        if status.meta_learner_enabled:
+            print("  Status: ENABLED")
+            print("  The meta learner is actively monitoring and optimizing the system.")
+        else:
+            print("  Status: DISABLED")
+            print("  Meta learner is not configured or LLM client is not available.")
+        print("")
+
+    def _show_config(self):
+        """Show current configuration summary."""
+        print("\nCurrent Configuration:")
+        if self.manager.config_path:
+            print(f"  Config File: {self.manager.config_path}")
+        else:
+            print("  Config File: Not loaded")
+        
+        status = self.manager.get_status()
+        print(f"  Framework State: {status.state.value}")
+        print(f"  Components: {len(status.components)}")
+        if status.components:
+            for comp in status.components:
+                print(f"    - {comp}")
+        print(f"  Managed Systems: {len(status.managed_systems)}")
+        for sys_id, sys_info in status.managed_systems.items():
+            print(f"    - {sys_id}: {sys_info.get('connector_type', 'unknown')}")
+        print("")
 

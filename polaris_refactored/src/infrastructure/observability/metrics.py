@@ -13,7 +13,12 @@ from enum import Enum
 from pathlib import Path
 from threading import Lock
 from typing import Any, Dict, List, Optional, Union
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+
+def _utc_now() -> datetime:
+    """Return current UTC time as timezone-aware datetime."""
+    return datetime.now(timezone.utc)
 
 
 class MetricType(Enum):
@@ -33,7 +38,7 @@ class MetricValue:
     
     def __post_init__(self):
         if self.timestamp is None:
-            self.timestamp = datetime.utcnow()
+            self.timestamp = _utc_now()
 
 
 @dataclass
@@ -50,7 +55,7 @@ class Metric(ABC):
         self.name = name
         self.description = description
         self.labels = labels or []
-        self.created_at = datetime.utcnow()
+        self.created_at = _utc_now()
         self._lock = Lock()
     
     @abstractmethod
@@ -91,7 +96,7 @@ class Counter(Metric):
         key = self._get_key(labels)
         with self._lock:
             value = self._values[key]
-        return MetricValue(value=value, timestamp=datetime.utcnow(), labels=labels or {})
+        return MetricValue(value=value, timestamp=_utc_now(), labels=labels or {})
     
     def get_type(self) -> MetricType:
         return MetricType.COUNTER
@@ -133,7 +138,7 @@ class Gauge(Metric):
         key = self._get_key(labels)
         with self._lock:
             value = self._values[key]
-        return MetricValue(value=value, timestamp=datetime.utcnow(), labels=labels or {})
+        return MetricValue(value=value, timestamp=_utc_now(), labels=labels or {})
     
     def get_type(self) -> MetricType:
         return MetricType.GAUGE
@@ -183,7 +188,7 @@ class Histogram(Metric):
             'buckets': buckets
         }
         
-        return MetricValue(value=value, timestamp=datetime.utcnow(), labels=labels or {})
+        return MetricValue(value=value, timestamp=_utc_now(), labels=labels or {})
     
     def get_type(self) -> MetricType:
         return MetricType.HISTOGRAM

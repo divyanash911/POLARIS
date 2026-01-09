@@ -11,8 +11,13 @@ import sys
 import uuid
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
+
+
+def _utc_now() -> datetime:
+    """Return current UTC time as timezone-aware datetime."""
+    return datetime.now(timezone.utc)
 from pathlib import Path
 from typing import Any, Dict, Optional, TextIO, Union
 from contextvars import ContextVar
@@ -226,7 +231,7 @@ class PolarisLogger:
     def _create_log_record(self, level: LogLevel, message: str, extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Create a structured log record"""
         record = {
-            'timestamp': datetime.utcnow().isoformat() + 'Z',
+            'timestamp': _utc_now().isoformat(),
             'level': level.value,
             'logger': self.name,
             'message': message,

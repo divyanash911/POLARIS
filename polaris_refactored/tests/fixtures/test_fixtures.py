@@ -17,7 +17,7 @@ from .mock_objects import (
 )
 
 from domain.models import SystemState, AdaptationAction
-from src.infrastructure.di import DIContainer
+from infrastructure.di import DIContainer
 
 
 @pytest.fixture

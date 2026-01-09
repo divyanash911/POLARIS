@@ -6,10 +6,17 @@ Tests for the migrated SWIM connector to ensure it works with the refactored POL
 
 import pytest
 import asyncio
+import sys
 from unittest.mock import Mock, patch, AsyncMock
 from datetime import datetime, timezone
+from pathlib import Path
 
-from plugins.swim.connector import SwimTCPConnector
+# Add plugins directory to path
+_plugins_path = Path(__file__).parent.parent.parent.parent / "plugins"
+if str(_plugins_path) not in sys.path:
+    sys.path.insert(0, str(_plugins_path))
+
+from swim.connector import SwimTCPConnector
 from domain.models import AdaptationAction, HealthStatus, ExecutionStatus
 
 

@@ -75,6 +75,7 @@ class LLMMetaLearner(BaseMetaLearner):
         knowledge_base: Optional[PolarisKnowledgeBase] = None,
         adaptive_controller: Optional[PolarisAdaptiveController] = None,
         controller_config_path: Optional[Path] = None,
+        managed_system_ids: Optional[List[str]] = None,
         logger: Optional[logging.Logger] = None,
     ) -> None:
         """Initialize the LLM Meta Learner.
@@ -86,6 +87,7 @@ class LLMMetaLearner(BaseMetaLearner):
             knowledge_base: POLARIS knowledge base for historical data.
             adaptive_controller: Reference to the adaptive controller.
             controller_config_path: Path to controller runtime config YAML.
+            managed_system_ids: List of managed system IDs to analyze.
             logger: Optional logger instance.
         """
         super().__init__(
@@ -98,6 +100,7 @@ class LLMMetaLearner(BaseMetaLearner):
         self.llm_client = llm_client
         self.adaptive_controller = adaptive_controller
         self.controller_config_path = controller_config_path or CONTROLLER_RUNTIME_CONFIG_PATH
+        self._managed_system_ids = managed_system_ids or []
         
         # Cache for recent analysis results
         self._last_analysis_time: Optional[datetime] = None
@@ -111,20 +114,45 @@ class LLMMetaLearner(BaseMetaLearner):
         # Initialize observability
         self._init_observability()
 
+    def set_managed_systems(self, system_ids: List[str]) -> None:
+        """Update the list of managed systems to analyze.
+        
+        Args:
+            system_ids: List of system IDs to analyze in continuous mode.
+        """
+        self._managed_system_ids = system_ids.copy()
+        self.logger.info(f"Updated managed systems for analysis: {system_ids}")
+
+    def get_managed_systems(self) -> List[str]:
+        """Get the current list of managed systems being analyzed."""
+        return self._managed_system_ids.copy()
+
     async def start(self) -> None:
         """Start the meta learner."""
-        self.logger.info("Starting meta learner", extra={"component": self.component_id})
+        self.logger.info("Starting meta learner", extra={
+            "component": self.component_id,
+            "managed_systems": self._managed_system_ids
+        })
         self._record_metric("meta_learner.start_count", 1)
         self._is_running = True
         
         # Start continuous analysis loop if enabled
         continuous_config = self._config_cache.get("continuous", {})
         if continuous_config.get("enabled", False):
+            if not self._managed_system_ids:
+                self.logger.warning(
+                    "Continuous analysis enabled but no managed systems configured. "
+                    "Call set_managed_systems() to configure systems for analysis."
+                )
             self._analysis_task = asyncio.create_task(self._run_continuous_analysis_loop())
             interval = continuous_config.get("analysis_interval_seconds", 300)
             self.logger.info(
                 "Continuous analysis loop started",
-                extra={"interval_seconds": interval, "auto_apply": continuous_config.get("auto_apply_changes", False)}
+                extra={
+                    "interval_seconds": interval, 
+                    "auto_apply": continuous_config.get("auto_apply_changes", False),
+                    "systems_count": len(self._managed_system_ids)
+                }
             )
         
     async def stop(self) -> None:
@@ -154,11 +182,30 @@ class LLMMetaLearner(BaseMetaLearner):
                 # Wait for interval
                 await asyncio.sleep(interval)
                 
-                # Identify systems to analyze (for now, just use 'system')
-                # In full implementation, we'd query knowledge base for active systems
-                system_id = "polaris_system"
+                # Get systems to analyze
+                systems_to_analyze = self._managed_system_ids.copy()
                 
-                await self.run_analysis_cycle(system_id=system_id, apply_changes=auto_apply)
+                # If no managed systems configured, try to get from knowledge base
+                if not systems_to_analyze and self.knowledge_base:
+                    try:
+                        # Try to get systems that have recent telemetry data
+                        # This is a fallback mechanism
+                        self.logger.debug("No managed systems configured, attempting to discover from knowledge base")
+                    except Exception as e:
+                        self.logger.warning(f"Could not discover systems from knowledge base: {e}")
+                
+                if not systems_to_analyze:
+                    self.logger.warning("No managed systems available for analysis, skipping cycle")
+                    continue
+                
+                # Run analysis for each managed system
+                for system_id in systems_to_analyze:
+                    try:
+                        self.logger.info(f"Running analysis cycle for system: {system_id}")
+                        await self.run_analysis_cycle(system_id=system_id, apply_changes=auto_apply)
+                    except Exception as e:
+                        self.logger.error(f"Error analyzing system {system_id}: {e}")
+                        # Continue with other systems
                 
             except asyncio.CancelledError:
                 break

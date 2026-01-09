@@ -2,14 +2,18 @@
 POLARIS Message Bus Implementation
 
 Provides message bus functionality for inter-component communication.
-This is a simplified implementation for the SWIM system demo.
+Implements an in-memory message bus with topic-based pub/sub pattern.
+
+Note: For production deployments, consider using NATS, Redis, or similar
+distributed messaging systems for scalability and persistence.
 """
 
 import asyncio
-import logging
 from typing import Dict, Any, Optional, Callable, List
 from dataclasses import dataclass
 from datetime import datetime, timezone
+
+from infrastructure.observability.factory import get_infrastructure_logger
 
 
 @dataclass
@@ -24,13 +28,15 @@ class Message:
 
 class PolarisMessageBus:
     """
-    Simple in-memory message bus implementation.
+    In-memory message bus implementation for inter-component communication.
     
-    In a production system, this would be backed by NATS, Redis, or similar.
+    Provides topic-based publish/subscribe messaging with async support.
+    For production deployments requiring persistence or distribution,
+    integrate with NATS, Redis, or similar messaging systems.
     """
     
     def __init__(self):
-        self.logger = logging.getLogger(self.__class__.__name__)
+        self.logger = get_infrastructure_logger("message_bus")
         self._subscribers: Dict[str, List[Callable]] = {}
         self._running = False
         # _connected reflects whether the message bus is logically connected/available

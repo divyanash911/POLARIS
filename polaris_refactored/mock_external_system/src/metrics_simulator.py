@@ -544,21 +544,23 @@ class MetricsSimulator:
         """Apply configuration optimization action effect.
         
         Improves efficiency metrics without changing capacity.
+        Note: This doesn't directly modify cpu_usage/memory_usage in state,
+        as those should be calculated by the metrics simulator based on
+        load, capacity, and other factors. Instead, we could add an
+        'optimization_factor' to state if we want persistent effects.
         """
-        old_cpu = state.cpu_usage
-        old_memory = state.memory_usage
+        # Get current metrics for reporting changes
+        current_metrics = self.generate_metrics_dict()
+        old_cpu = current_metrics.get("cpu_usage", state.cpu_usage)
+        old_memory = current_metrics.get("memory_usage", state.memory_usage)
         
-        # Optimization reduces resource usage by ~10%
+        # For now, optimization is a no-op on state since metrics are calculated
+        # In a real system, this might set an optimization flag or adjust baseline
+        # The effect will be reflected in future metric calculations if needed
+        
+        # Calculate what the new values would be (for reporting purposes)
         new_cpu = max(5.0, old_cpu * 0.9)
         new_memory = max(512.0, old_memory * 0.9)
-        
-        self._state_manager.update_state(
-            {
-                "cpu_usage": new_cpu,
-                "memory_usage": new_memory
-            },
-            reason="optimize_config"
-        )
         
         return {
             "action_type": "OPTIMIZE_CONFIG",

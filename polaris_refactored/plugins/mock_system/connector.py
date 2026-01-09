@@ -3,13 +3,10 @@ Mock System TCP Connector for POLARIS Framework.
 
 This module implements the managed system connector for the mock external system,
 handling TCP communication with retry logic and error handling.
-
-Requirements: 4.1, 4.2, 4.3, 4.4, 4.5
 """
 
 import asyncio
 import json
-import logging
 import time
 from typing import Any, Dict, Optional, List
 from datetime import datetime, timezone
@@ -19,6 +16,7 @@ from domain.models import (
     SystemState, AdaptationAction, ExecutionResult, MetricValue, 
     HealthStatus, ExecutionStatus
 )
+from infrastructure.observability.factory import get_adapter_logger
 
 
 class MockSystemConnector(ManagedSystemConnector):
@@ -40,7 +38,6 @@ class MockSystemConnector(ManagedSystemConnector):
             system_config: Complete configuration for mock system (optional for basic usage)
         """
         self.config = system_config or {}
-        self.logger = logging.getLogger(f"{self.__class__.__name__}")
         
         # Extract connection parameters
         connection_config = self.config.get("connection", {})
@@ -57,6 +54,9 @@ class MockSystemConnector(ManagedSystemConnector):
         # Connection state
         self._connected = False
         self._system_id = self.config.get("system_name", "mock_system")
+        
+        # Use POLARIS logging
+        self.logger = get_adapter_logger(f"mock_system.{self._system_id}")
         
         self.logger.info(
             "Mock system connector initialized",

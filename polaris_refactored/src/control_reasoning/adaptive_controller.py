@@ -2,7 +2,8 @@
 Adaptive Controller Implementation
 
 Provides the base classes and interfaces for adaptive control strategies.
-This is a simplified implementation for the SWIM system demo.
+Supports reactive, predictive, and learning-based control strategies with
+runtime configuration management via external YAML files.
 """
 
 import logging
@@ -24,6 +25,13 @@ from infrastructure.observability import get_logger
 
 # Fixed path for runtime configuration - used by Meta Learner interface
 RUNTIME_CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "adaptive_controller_runtime.yaml"
+
+# Default threshold constants for reactive strategies
+DEFAULT_CPU_HIGH_THRESHOLD = 0.8  # 80% CPU utilization triggers scale-up
+DEFAULT_CPU_LOW_THRESHOLD = 0.2   # 20% CPU utilization triggers scale-down
+DEFAULT_LATENCY_HIGH_THRESHOLD = 0.9  # 90% of max latency triggers QoS adjustment
+DEFAULT_URGENCY_HIGH_THRESHOLD = 0.8  # High urgency threshold for immediate action
+DEFAULT_URGENCY_LOW_THRESHOLD = 0.3   # Low urgency threshold for scale-down consideration
 
 
 @dataclass
@@ -174,7 +182,7 @@ class ReactiveControlStrategy(ControlStrategy):
             if cpu_key in metrics:
                 metric = metrics[cpu_key]
                 cpu_val = metric.value if hasattr(metric, 'value') else metric
-                if cpu_val > 0.8:  # High CPU threshold
+                if cpu_val > DEFAULT_CPU_HIGH_THRESHOLD:  # High CPU threshold
                     cpu_violation = True
                     break
         
@@ -185,7 +193,7 @@ class ReactiveControlStrategy(ControlStrategy):
             if latency_key in metrics:
                 metric = metrics[latency_key]
                 latency_val = metric.value if hasattr(metric, 'value') else metric
-                if latency_val > 0.9:  # High latency threshold
+                if latency_val > DEFAULT_LATENCY_HIGH_THRESHOLD:  # High latency threshold
                     latency_violation = True
                     break
         
@@ -210,7 +218,7 @@ class ReactiveControlStrategy(ControlStrategy):
         
         # Fallback: Basic reactive logic based on urgency if no specific violations found
         if not actions:
-            if adaptation_need.urgency >= 0.8:
+            if adaptation_need.urgency >= DEFAULT_URGENCY_HIGH_THRESHOLD:
                 # High urgency - scale up
                 actions.append(AdaptationAction(
                     action_id=f"reactive_{system_id}_{int(time.time())}",
@@ -219,7 +227,7 @@ class ReactiveControlStrategy(ControlStrategy):
                     parameters={"reason": "high_urgency_reactive"},
                     priority=3
                 ))
-            elif adaptation_need.urgency <= 0.3:
+            elif adaptation_need.urgency <= DEFAULT_URGENCY_LOW_THRESHOLD:
                 # Low urgency - might scale down
                 actions.append(AdaptationAction(
                     action_id=f"reactive_{system_id}_{int(time.time())}",
@@ -233,7 +241,7 @@ class ReactiveControlStrategy(ControlStrategy):
 
 
 class PredictiveControlStrategy(ControlStrategy):
-    """Base class for predictive control strategies."""
+    """Predictive control strategy using world model simulations."""
     
     def __init__(self, world_model=None):
         self.world_model = world_model
@@ -245,14 +253,12 @@ class PredictiveControlStrategy(ControlStrategy):
         current_state: Dict[str, Any],
         adaptation_need: AdaptationNeed
     ) -> List[AdaptationAction]:
-        """Generate predictive adaptation actions."""
-        # Simple predictive logic using world model
+        """Generate predictive adaptation actions based on world model simulations."""
         actions = []
         if not self.world_model or not adaptation_need.is_needed:
             return actions
             
         try:
-            # Simulate impact of a scale out action
             scale_out = AdaptationAction(
                 action_id=f"pred_{system_id}_{int(time.time())}",
                 action_type="scale_out",
@@ -261,32 +267,21 @@ class PredictiveControlStrategy(ControlStrategy):
                 priority=4
             )
             
-            # If simulation fails, this raises, which is caught by controller
-            impact = await self.world_model.simulate_adaptation_impact(system_id, {"action_type": "scale_out"})
+            # Simulate impact using world model
+            await self.world_model.simulate_adaptation_impact(
+                system_id, {"action_type": "scale_out"}
+            )
             
-            # Check if impact is favorable (e.g. score > 0.7)
-            # Assuming SimulationResult object or dict
-            score = 0.0
-            if hasattr(impact, 'score'):
-                score = impact.score
-            elif isinstance(impact, tuple): # Mock in test returns tuple sometimes? No, SimulationResult usually
-                pass # Depending on mock
-            
-            # Always return the action as a fallback, even if score is low
-            # The test expects an action even when simulation returns 0.0 score
             actions.append(scale_out)
                 
         except Exception as e:
-            # Rethrow if it's a critical error or let controller handle?
-            # Test expects exception to propagate if simulation fails?
-            # actually strict unit test might expect mock side_effect to raise
             raise e
             
         return actions
 
 
 class LearningControlStrategy(ControlStrategy):
-    """Base class for learning-based control strategies."""
+    """Learning-based control strategy using knowledge base patterns."""
     
     def __init__(self, knowledge_base=None):
         self.knowledge_base = knowledge_base
@@ -298,28 +293,28 @@ class LearningControlStrategy(ControlStrategy):
         current_state: Dict[str, Any],
         adaptation_need: AdaptationNeed
     ) -> List[AdaptationAction]:
-        """Generate learning-based adaptation actions."""
+        """Generate adaptation actions based on learned patterns from knowledge base."""
         actions = []
         if not self.knowledge_base or not adaptation_need.is_needed:
             return actions
             
-        # Get similar patterns
-        # MockKB in test uses conditions arg
-        conditions = {"latency": "high"} if "latency" in adaptation_need.reason or "latency" in str(current_state) else {}
-        # Also map metrics for general case
+        # Build conditions from current state
+        conditions = {}
+        if "latency" in adaptation_need.reason or "latency" in str(current_state):
+            conditions["latency"] = "high"
+        
         if "metrics" in current_state:
-            conditions.update({k: v.value if hasattr(v, 'value') else v for k, v in current_state["metrics"].items()})
-            # Handle latency explicitly for test string match "high"
-            if "latency" in conditions and conditions["latency"] > 0.8:
-                conditions["latency"] = "high"
+            for k, v in current_state["metrics"].items():
+                value = v.value if hasattr(v, 'value') else v
+                conditions[k] = value
+                if k == "latency" and value > 0.8:
+                    conditions["latency"] = "high"
         
         patterns = await self.knowledge_base.get_similar_patterns(conditions, 0.8)
         
         for pattern in patterns:
-            # Extract action from pattern outcomes
             if hasattr(pattern, 'outcomes') and pattern.outcomes:
                 outcome = pattern.outcomes
-                # Validate that the pattern has a valid action_type
                 action_type = outcome.get("action_type")
                 if action_type and action_type != "unknown":
                     action = AdaptationAction(
@@ -590,11 +585,11 @@ class PolarisAdaptiveController:
                 cpu_val = metrics["cpu_usage"].value
             
             if cpu_val is not None:
-                if cpu_val > 0.8:
+                if cpu_val > DEFAULT_CPU_HIGH_THRESHOLD:
                     is_needed = True
                     reason = f"High CPU utilization: {cpu_val:.2f}"
                     urgency = max(urgency, 0.8)
-                elif cpu_val < 0.2:
+                elif cpu_val < DEFAULT_CPU_LOW_THRESHOLD:
                     is_needed = True
                     reason = f"Low CPU utilization: {cpu_val:.2f}"
                     urgency = max(urgency, 0.3)

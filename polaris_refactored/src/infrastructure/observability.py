@@ -2,7 +2,7 @@
 POLARIS Observability Infrastructure
 
 Provides logging, metrics, and tracing capabilities for the POLARIS framework.
-This is a simplified implementation for the SWIM system demo.
+Includes support for structured logging, metrics collection, and distributed tracing.
 """
 
 import logging
@@ -34,12 +34,15 @@ class MetricValue:
 
 
 class MetricsCollector:
-    """Simple metrics collector."""
+    """Simple metrics collector with proper registration and export support."""
     
     def __init__(self):
         self.metrics: Dict[str, List[MetricValue]] = {}
         self.counters: Dict[str, float] = {}
         self.gauges: Dict[str, float] = {}
+        self._registered_counters: Dict[str, Dict[str, Any]] = {}
+        self._registered_histograms: Dict[str, Dict[str, Any]] = {}
+        self._export_callbacks: List[Callable] = []
     
     def record_counter(self, name: str, value: float = 1.0, tags: Optional[Dict[str, str]] = None) -> None:
         """Record a counter metric."""
@@ -90,12 +93,59 @@ class MetricsCollector:
             self.record_histogram("telemetry_processing_duration", duration, {"system_id": system_id})
     
     def register_counter(self, name: str, description: str, labels: List[str]) -> None:
-        """Register a counter metric (for compatibility)."""
-        pass
+        """Register a counter metric with metadata."""
+        self._registered_counters[name] = {
+            "description": description,
+            "labels": labels,
+            "created_at": datetime.now(timezone.utc)
+        }
+        if name not in self.counters:
+            self.counters[name] = 0.0
     
     def register_histogram(self, name: str, description: str, labels: List[str]) -> None:
-        """Register a histogram metric (for compatibility)."""
-        pass
+        """Register a histogram metric with metadata."""
+        self._registered_histograms[name] = {
+            "description": description,
+            "labels": labels,
+            "created_at": datetime.now(timezone.utc)
+        }
+        if name not in self.metrics:
+            self.metrics[name] = []
+    
+    def add_export_callback(self, callback: Callable[[Dict[str, Any]], None]) -> None:
+        """Add a callback for metrics export (e.g., Prometheus, OTLP)."""
+        self._export_callbacks.append(callback)
+    
+    def export_metrics(self) -> Dict[str, Any]:
+        """Export all metrics in a structured format."""
+        export_data = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "counters": {
+                name: {
+                    "value": value,
+                    "metadata": self._registered_counters.get(name, {})
+                }
+                for name, value in self.counters.items()
+            },
+            "gauges": dict(self.gauges),
+            "histograms": {
+                name: {
+                    "values": [{"value": m.value, "timestamp": m.timestamp.isoformat()} for m in values[-100:]],
+                    "count": len(values),
+                    "metadata": self._registered_histograms.get(name, {})
+                }
+                for name, values in self.metrics.items()
+            }
+        }
+        
+        # Call export callbacks
+        for callback in self._export_callbacks:
+            try:
+                callback(export_data)
+            except Exception as e:
+                logging.getLogger(__name__).error(f"Metrics export callback failed: {e}")
+        
+        return export_data
 
 
 class Tracer:

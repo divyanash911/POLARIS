@@ -26,7 +26,7 @@ class PolarisPluginRegistry(Injectable):
     - Automatic plugin discovery in configured search paths
     - Plugin validation and error reporting
     - Hot-reloading capabilities without system restart
-    - Thread-safe plugin management
+    - Thread-safe and async-safe plugin management
     - Comprehensive logging and error handling
     """
     
@@ -38,13 +38,20 @@ class PolarisPluginRegistry(Injectable):
         self._hot_reload_enabled = False
         self._hot_reload_thread: Optional[threading.Thread] = None
         self._stop_hot_reload = threading.Event()
-        self._registry_lock = threading.RLock()
+        self._registry_lock = threading.RLock()  # For sync operations
+        self._async_lock: Optional[asyncio.Lock] = None  # For async operations, created lazily
         self._discovery = PluginDiscovery()
         
         # Use POLARIS logging
         self.logger = get_framework_logger("plugin_registry")
         
         self.logger.info("PolarisPluginRegistry initialized")
+    
+    def _get_async_lock(self) -> asyncio.Lock:
+        """Get or create the async lock (must be called from async context)."""
+        if self._async_lock is None:
+            self._async_lock = asyncio.Lock()
+        return self._async_lock
     
     async def initialize(self, search_paths: Optional[List[Path]] = None, enable_hot_reload: bool = False) -> None:
         """Initialize the plugin registry with discovery and optional hot-reloading."""
@@ -169,7 +176,7 @@ class PolarisPluginRegistry(Injectable):
     
     async def reload_plugin(self, system_id: str) -> None:
         """Reload a plugin without system restart."""
-        with self._registry_lock:
+        async with self._get_async_lock():
             try:
                 # Unload existing connector
                 if system_id in self._connectors:

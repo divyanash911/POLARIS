@@ -127,16 +127,20 @@ class PluginDiscovery:
             return None
     
     def _infer_plugin_from_connector_file(self, connector_file: Path) -> Optional[PluginDescriptor]:
-        """Infer plugin metadata from a connector Python file with security validation."""
+        """Infer plugin metadata from a connector Python file with security validation.
+        
+        SECURITY: Validation is performed BEFORE loading the module to prevent
+        malicious code execution during import.
+        """
         try:
-            # Security validation first
+            # SECURITY: Perform all validation BEFORE loading the module
             path_errors = self._validator.validate_plugin_path(connector_file)
             import_errors = self._validator.validate_plugin_imports(connector_file)
             
             validation_errors = path_errors + import_errors
             if validation_errors:
                 logger.warning(f"Security validation failed for {connector_file}: {validation_errors}")
-                # Still create descriptor but mark as invalid
+                # Return invalid descriptor WITHOUT loading the module
                 plugin_id = connector_file.parent.name if connector_file.parent.name != connector_file.parent.parent.name else connector_file.stem
                 return PluginDescriptor(
                     plugin_id=plugin_id,
@@ -151,7 +155,7 @@ class PluginDiscovery:
                     validation_errors=validation_errors
                 )
             
-            # Load the module to inspect it
+            # SECURITY: Only load the module AFTER validation passes
             spec = importlib.util.spec_from_file_location("temp_connector", connector_file)
             if not spec or not spec.loader:
                 return None

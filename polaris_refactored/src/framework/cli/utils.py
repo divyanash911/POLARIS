@@ -10,14 +10,18 @@ try:
     from rich.console import Console
     from rich.table import Table
     from rich.panel import Panel
+    from rich import box
     from rich import print as rprint
     RICH_AVAILABLE = True
+    _console = Console()
 except ImportError:
     RICH_AVAILABLE = False
     Console = None  # type: ignore
     Table = None  # type: ignore
     Panel = None  # type: ignore
+    box = None  # type: ignore
     rprint = print
+    _console = None
 
 def get_script_dir() -> Path:
     """Get the absolute path to the script directory."""
@@ -85,3 +89,71 @@ def print_banner(version: str):
     else:
         print(banner)
 
+
+def get_console() -> Any:
+    """Get the Rich console instance or a fallback."""
+    if RICH_AVAILABLE and _console:
+        return _console
+    # Return a simple fallback that mimics basic console operations
+    class FallbackConsole:
+        def print(self, *args, **kwargs):
+            # Strip rich markup if present
+            text = str(args[0]) if args else ""
+            print(text)
+        def print_json(self, data):
+            print(data)
+        def clear(self):
+            clear_screen()
+        def status(self, message):
+            return _FallbackStatus(message)
+    return FallbackConsole()
+
+
+class _FallbackStatus:
+    """Fallback context manager for console.status()."""
+    def __init__(self, message: str):
+        self.message = message
+    def __enter__(self):
+        print(self.message)
+        return self
+    def __exit__(self, *args):
+        pass
+
+
+def create_header(title: str) -> Any:
+    """Create a styled header panel."""
+    if RICH_AVAILABLE and Panel:
+        return Panel(title, style="bold blue", expand=False)
+    return f"\n{'=' * 60}\n{title}\n{'=' * 60}"
+
+
+def print_warning(message: str) -> None:
+    """Print a warning message."""
+    if RICH_AVAILABLE:
+        rprint(f"[yellow]⚠️  {message}[/yellow]")
+    else:
+        print(f"WARNING: {message}")
+
+
+def print_error(message: str) -> None:
+    """Print an error message."""
+    if RICH_AVAILABLE:
+        rprint(f"[bold red]❌ {message}[/bold red]")
+    else:
+        print(f"ERROR: {message}")
+
+
+def print_success(message: str) -> None:
+    """Print a success message."""
+    if RICH_AVAILABLE:
+        rprint(f"[bold green]✅ {message}[/bold green]")
+    else:
+        print(f"SUCCESS: {message}")
+
+
+def print_info(message: str) -> None:
+    """Print an info message."""
+    if RICH_AVAILABLE:
+        rprint(f"[cyan]ℹ️  {message}[/cyan]")
+    else:
+        print(f"INFO: {message}")

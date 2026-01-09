@@ -10,6 +10,7 @@ import pytest
 from framework.events import PolarisEventBus, TelemetryEvent, ExecutionResultEvent
 from control_reasoning.adaptive_controller import PolarisAdaptiveController
 from digital_twin.knowledge_base import PolarisKnowledgeBase
+from digital_twin.telemetry_subscriber import TelemetryToKnowledgeBaseHandler
 from infrastructure.data_storage.data_store import PolarisDataStore
 from infrastructure.data_storage.storage_backend import InMemoryGraphStorageBackend
 from adapters.monitor_adapter.monitor_adapter import MonitorAdapter
@@ -47,6 +48,10 @@ async def knowledge_base():
 async def test_full_system_pull_persists_telemetry_and_history(event_bus, knowledge_base):
     controller = PolarisAdaptiveController(event_bus=event_bus, knowledge_base=knowledge_base)
     sub_ctrl = event_bus.subscribe(TelemetryEvent, controller.process_telemetry)
+    
+    # Subscribe telemetry persistence handler to store telemetry in knowledge base
+    telemetry_handler = TelemetryToKnowledgeBaseHandler(knowledge_base)
+    sub_telemetry = event_bus.subscribe(TelemetryEvent, telemetry_handler.handle)
 
     connector = FullMockConnector("int-1")
     registry = FakePluginRegistry({"mock": connector})
@@ -95,6 +100,7 @@ async def test_full_system_pull_persists_telemetry_and_history(event_bus, knowle
     await exec_adapter.stop()
     await registry.shutdown()
     await event_bus.unsubscribe(sub_ctrl)
+    await event_bus.unsubscribe(sub_telemetry)
     await event_bus.unsubscribe(sub_exec_persist)
 
 
@@ -102,6 +108,10 @@ async def test_full_system_pull_persists_telemetry_and_history(event_bus, knowle
 async def test_full_system_push_persists_telemetry_and_history(event_bus, knowledge_base):
     controller = PolarisAdaptiveController(event_bus=event_bus, knowledge_base=knowledge_base)
     sub_ctrl = event_bus.subscribe(TelemetryEvent, controller.process_telemetry)
+    
+    # Subscribe telemetry persistence handler to store telemetry in knowledge base
+    telemetry_handler = TelemetryToKnowledgeBaseHandler(knowledge_base)
+    sub_telemetry = event_bus.subscribe(TelemetryEvent, telemetry_handler.handle)
 
     connector = FullMockConnector("int-2")
     registry = FakePluginRegistry({"mock": connector})
@@ -148,3 +158,4 @@ async def test_full_system_push_persists_telemetry_and_history(event_bus, knowle
     await exec_adapter.stop()
     await registry.shutdown()
     await event_bus.unsubscribe(sub_ctrl)
+    await event_bus.unsubscribe(sub_telemetry)

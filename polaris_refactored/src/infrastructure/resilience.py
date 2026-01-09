@@ -13,11 +13,11 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Awaitable, Callable, Dict, List, Optional, TypeVar, Union
-import logging
 
 from .exceptions import PolarisException
+from .observability.factory import get_infrastructure_logger
 
-logger = logging.getLogger(__name__)
+logger = get_infrastructure_logger("resilience")
 
 T = TypeVar('T')
 

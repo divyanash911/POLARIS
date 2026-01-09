@@ -514,28 +514,52 @@ class PolarisAdapter(Injectable, ABC):
     
     async def _publish_lifecycle_event(self, event_type: str, data: Optional[Dict[str, Any]] = None) -> None:
         """Publish lifecycle events to event bus."""
-        if not self.event_bus:
-            return
+        event_data = {
+            "adapter_id": self.adapter_id,
+            "adapter_type": self.adapter_type,
+            "event_type": event_type,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "state": self._state.value,
+            "health_status": self._health_status.value
+        }
         
-        try:
-            # Create a generic event for adapter lifecycle
-            # In a real implementation, you might want specific event types
-            event_data = {
-                "adapter_id": self.adapter_id,
-                "adapter_type": self.adapter_type,
-                "event_type": event_type,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "state": self._state.value,
-                "health_status": self._health_status.value
-            }
-            
-            if data:
-                event_data.update(data)
-            
-            self.logger.info(f"Adapter lifecycle event: {event_data}")
-            
-        except Exception as e:
-            self.logger.error(f"Failed to publish lifecycle event for adapter {self.adapter_id}: {e}")
+        if data:
+            event_data.update(data)
+        
+        self.logger.info(f"Adapter lifecycle event: {event_data}")
+        
+        # Actually publish to event bus if available
+        if self.event_bus:
+            try:
+                from framework.events import PolarisEvent, EventMetadata
+                
+                class AdapterLifecycleEvent(PolarisEvent):
+                    """Event for adapter lifecycle changes."""
+                    def __init__(self, adapter_id: str, lifecycle_type: str, details: Dict[str, Any], **kwargs):
+                        super().__init__(**kwargs)
+                        self.adapter_id = adapter_id
+                        self.lifecycle_type = lifecycle_type
+                        self.details = details
+                        self.metadata.source = f"adapter:{adapter_id}"
+                    
+                    def to_dict(self) -> Dict[str, Any]:
+                        base_dict = super().to_dict()
+                        base_dict.update({
+                            "adapter_id": self.adapter_id,
+                            "lifecycle_type": self.lifecycle_type,
+                            "details": self.details
+                        })
+                        return base_dict
+                
+                lifecycle_event = AdapterLifecycleEvent(
+                    adapter_id=self.adapter_id,
+                    lifecycle_type=event_type,
+                    details=event_data
+                )
+                await self.event_bus.publish(lifecycle_event)
+                self.logger.debug(f"Published lifecycle event to event bus: {event_type}")
+            except Exception as e:
+                self.logger.warning(f"Failed to publish lifecycle event to event bus: {e}")
     
     def add_pre_start_hook(self, hook: Callable) -> None:
         """Add a pre-start hook."""

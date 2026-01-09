@@ -226,6 +226,84 @@ class PolarisFrameworkManager:
             meta_learner_enabled=meta_learner_enabled
         )
     
+    async def get_system_status(self) -> Dict[str, Any]:
+        """Get status of all managed systems."""
+        result = {
+            "systems": [],
+            "total_count": 0,
+            "enabled_count": 0
+        }
+        
+        if not self.framework:
+            return result
+        
+        try:
+            if hasattr(self.framework, 'configuration'):
+                systems = self.framework.configuration.get_all_managed_systems()
+                for sys_id, sys_config in systems.items():
+                    result["systems"].append(sys_id)
+                    result["total_count"] += 1
+                    if sys_config.enabled:
+                        result["enabled_count"] += 1
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"Error getting system status: {e}")
+        
+        return result
+    
+    async def get_world_model_status(self) -> Dict[str, Any]:
+        """Get status of the world model component."""
+        if not self.framework:
+            return {"status": "NOT_AVAILABLE", "error": "Framework not running"}
+        
+        try:
+            from digital_twin import PolarisWorldModel
+            world_model = self.framework.container.resolve(PolarisWorldModel)
+            
+            if world_model:
+                return {
+                    "status": "AVAILABLE",
+                    "type": type(world_model).__name__,
+                    "has_predictions": hasattr(world_model, 'predict'),
+                    "has_state": hasattr(world_model, 'get_current_state')
+                }
+            return {"status": "NOT_AVAILABLE", "error": "World model not initialized"}
+        except Exception as e:
+            return {"status": "ERROR", "error": str(e)}
+    
+    async def export_knowledge_base(self, filename: str) -> Dict[str, Any]:
+        """Export knowledge base data to a file."""
+        if not self.framework:
+            return {"status": "ERROR", "error": "Framework not running"}
+        
+        try:
+            from digital_twin import PolarisKnowledgeBase
+            import json
+            
+            kb = self.framework.container.resolve(PolarisKnowledgeBase)
+            if not kb:
+                return {"status": "ERROR", "error": "Knowledge base not available"}
+            
+            # Export all data
+            data = await kb.export_all_data()
+            
+            # Write to file
+            output_path = Path(filename)
+            with open(output_path, 'w') as f:
+                json.dump(data, f, indent=2, default=str)
+            
+            counts = {k: len(v) if isinstance(v, list) else 1 for k, v in data.items()}
+            
+            return {
+                "status": "SUCCESS",
+                "file": str(output_path.absolute()),
+                "counts": counts
+            }
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"Error exporting knowledge base: {e}")
+            return {"status": "ERROR", "error": str(e)}
+    
     async def run_until_shutdown(self):
         """Run the framework until shutdown signal received."""
         self._shutdown_event.clear()

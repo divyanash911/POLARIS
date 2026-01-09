@@ -611,3 +611,77 @@ class TestMetaLearnerObservability:
         learner._record_metric("test.metric", 1.0)  # Should not raise
         learner._record_metric("test.metric", 1.0, {"label": "value"})  # Should not raise
 
+
+
+class TestManagedSystemsConfiguration:
+    """Tests for managed systems configuration in meta learner."""
+    
+    def test_set_managed_systems(self, temp_config_file, mock_llm_client, mock_knowledge_base):
+        """Test setting managed systems for analysis."""
+        learner = LLMMetaLearner(
+            component_id="systems_test",
+            config_path=str(temp_config_file),
+            llm_client=mock_llm_client,
+            knowledge_base=mock_knowledge_base,
+        )
+        
+        # Initially empty
+        assert learner.get_managed_systems() == []
+        
+        # Set systems
+        learner.set_managed_systems(["system_a", "system_b"])
+        assert learner.get_managed_systems() == ["system_a", "system_b"]
+        
+        # Update systems
+        learner.set_managed_systems(["system_c"])
+        assert learner.get_managed_systems() == ["system_c"]
+    
+    def test_managed_systems_via_constructor(self, temp_config_file, mock_llm_client, mock_knowledge_base):
+        """Test passing managed systems via constructor."""
+        learner = LLMMetaLearner(
+            component_id="systems_test",
+            config_path=str(temp_config_file),
+            llm_client=mock_llm_client,
+            knowledge_base=mock_knowledge_base,
+            managed_system_ids=["swim", "mock_system"]
+        )
+        
+        assert learner.get_managed_systems() == ["swim", "mock_system"]
+    
+    @pytest.mark.asyncio
+    async def test_continuous_loop_with_managed_systems(self, temp_config_file, mock_llm_client, mock_knowledge_base):
+        """Test that continuous loop iterates over managed systems."""
+        # Create config with continuous enabled
+        temp_config_file.write_text("""
+version: 1
+component_id: "test_meta_learner"
+context_window_hours: 24.0
+limit_states: 50
+continuous:
+  enabled: true
+  analysis_interval_seconds: 1  # Short interval for testing
+  auto_apply_changes: false
+meta_learner:
+  constraints:
+    thresholds:
+      min: 0.0
+      max: 100.0
+""")
+        
+        learner = LLMMetaLearner(
+            component_id="loop_test",
+            config_path=str(temp_config_file),
+            llm_client=mock_llm_client,
+            knowledge_base=mock_knowledge_base,
+            managed_system_ids=["test_system_1", "test_system_2"]
+        )
+        
+        await learner.start()
+        
+        # Analysis task should be created
+        assert learner._analysis_task is not None
+        assert learner._is_running is True
+        
+        # Stop immediately (don't wait for analysis)
+        await learner.stop()
+        assert learner._is_running is False

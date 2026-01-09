@@ -1,13 +1,109 @@
 """
-Configuration validation utilities.
+Configuration validation utilities with JSON Schema support.
 """
 
 import os
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from pydantic import ValidationError
 
 from infrastructure.exceptions import ConfigurationError
 from .models import FrameworkConfiguration, ManagedSystemConfiguration
+
+
+# JSON Schema for POLARIS configuration
+POLARIS_CONFIG_SCHEMA = {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "POLARIS Configuration Schema",
+    "type": "object",
+    "properties": {
+        "framework": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "version": {"type": "string"},
+                "nats_config": {
+                    "type": "object",
+                    "properties": {
+                        "servers": {"type": "array", "items": {"type": "string"}},
+                        "username": {"type": "string"},
+                        "password": {"type": "string"},
+                        "timeout": {"type": "number", "minimum": 0}
+                    }
+                },
+                "telemetry_config": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {"type": "boolean"},
+                        "collection_interval": {"type": "integer", "minimum": 1},
+                        "batch_size": {"type": "integer", "minimum": 1},
+                        "retention_days": {"type": "integer", "minimum": 1}
+                    }
+                },
+                "logging_config": {
+                    "type": "object",
+                    "properties": {
+                        "level": {"type": "string", "enum": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]},
+                        "format": {"type": "string", "enum": ["text", "json"]},
+                        "output": {"type": "string", "enum": ["console", "file", "both"]},
+                        "file_path": {"type": "string"}
+                    }
+                },
+                "plugin_search_paths": {"type": "array", "items": {"type": "string"}},
+                "max_concurrent_adaptations": {"type": "integer", "minimum": 1},
+                "adaptation_timeout": {"type": "number", "minimum": 0}
+            }
+        },
+        "managed_systems": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "object",
+                "required": ["connector_type"],
+                "properties": {
+                    "connector_type": {"type": "string"},
+                    "enabled": {"type": "boolean"},
+                    "connection_params": {"type": "object"},
+                    "monitoring_config": {"type": "object"},
+                    "adaptation_config": {"type": "object"}
+                }
+            }
+        },
+        "llm": {
+            "type": "object",
+            "properties": {
+                "provider": {"type": "string", "enum": ["openai", "anthropic", "google", "mock"]},
+                "model_name": {"type": "string"},
+                "api_key": {"type": "string"},
+                "api_endpoint": {"type": "string"},
+                "max_tokens": {"type": "integer", "minimum": 1},
+                "temperature": {"type": "number", "minimum": 0, "maximum": 2}
+            }
+        },
+        "control_reasoning": {
+            "type": "object",
+            "properties": {
+                "adaptive_controller": {"type": "object"},
+                "threshold_reactive": {"type": "object"},
+                "reasoning_engine": {"type": "object"}
+            }
+        },
+        "digital_twin": {
+            "type": "object",
+            "properties": {
+                "world_model": {"type": "object"},
+                "knowledge_base": {"type": "object"},
+                "learning_engine": {"type": "object"}
+            }
+        },
+        "meta_learner": {
+            "type": "object",
+            "properties": {
+                "enabled": {"type": "boolean"},
+                "analysis_interval_seconds": {"type": "number", "minimum": 0},
+                "min_data_points": {"type": "integer", "minimum": 1}
+            }
+        }
+    }
+}
 
 
 class ConfigurationValidationError(ConfigurationError):
@@ -34,12 +130,44 @@ class ConfigurationValidator:
     """Validates configuration data and provides detailed error messages."""
     
     @staticmethod
-    def validate_configuration(config_data: Dict[str, Any]) -> List[str]:
+    def validate_with_json_schema(config_data: Dict[str, Any]) -> List[str]:
+        """
+        Validate configuration against JSON schema.
+        
+        Args:
+            config_data: Raw configuration data to validate
+            
+        Returns:
+            List of validation error messages
+        """
+        errors = []
+        
+        try:
+            import jsonschema
+            from jsonschema import Draft7Validator, ValidationError as JsonSchemaError
+            
+            validator = Draft7Validator(POLARIS_CONFIG_SCHEMA)
+            
+            for error in sorted(validator.iter_errors(config_data), key=lambda e: e.path):
+                path = " -> ".join(str(p) for p in error.path) if error.path else "root"
+                errors.append(f"{path}: {error.message}")
+                
+        except ImportError:
+            # jsonschema not installed, skip JSON schema validation
+            pass
+        except Exception as e:
+            errors.append(f"Schema validation error: {str(e)}")
+        
+        return errors
+    
+    @staticmethod
+    def validate_configuration(config_data: Dict[str, Any], use_json_schema: bool = True) -> List[str]:
         """
         Validate configuration data and return list of warnings.
         
         Args:
             config_data: Raw configuration data to validate
+            use_json_schema: Whether to use JSON schema validation
             
         Returns:
             List of warning messages for invalid configuration
@@ -49,6 +177,12 @@ class ConfigurationValidator:
         """
         errors = []
         warnings = []
+        
+        # JSON Schema validation first
+        if use_json_schema:
+            schema_errors = ConfigurationValidator.validate_with_json_schema(config_data)
+            if schema_errors:
+                warnings.extend([f"Schema warning: {e}" for e in schema_errors])
         
         try:
             # Validate framework configuration if present

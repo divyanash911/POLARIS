@@ -17,21 +17,41 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Dict, Any, List
+import sys
+
+# Ensure src is in path for imports
+src_path = Path(__file__).parent.parent.parent / "src"
+if str(src_path) not in sys.path:
+    sys.path.insert(0, str(src_path))
 
 from domain.models import (
     MetricValue, SystemState, AdaptationAction, 
     ExecutionResult, HealthStatus, ExecutionStatus
 )
-from src.framework.events import TelemetryEvent, AdaptationEvent
-from tests.integration.harness.polaris_integration_test_harness import (
+from framework.events import TelemetryEvent, AdaptationEvent
+
+# Import harness from local path
+harness_path = Path(__file__).parent / "harness"
+if str(harness_path) not in sys.path:
+    sys.path.insert(0, str(harness_path))
+
+from polaris_integration_test_harness import (
     PolarisIntegrationTestHarness, IntegrationTestConfig, SystemConfig,
     create_simple_harness, create_performance_harness
 )
 
 # Import mock system components for direct testing
-from polaris_refactored.mock_external_system.src.server import MockSystemServer
-from polaris_refactored.mock_external_system.src.state_manager import StateManager
-from polaris_refactored.plugins.mock_system.connector import MockSystemConnector
+mock_system_parent_path = Path(__file__).parent.parent.parent / "mock_external_system"
+if str(mock_system_parent_path) not in sys.path:
+    sys.path.insert(0, str(mock_system_parent_path))
+
+plugins_path = Path(__file__).parent.parent.parent / "plugins"
+if str(plugins_path) not in sys.path:
+    sys.path.insert(0, str(plugins_path))
+
+from src.server import MockSystemServer
+from src.state_manager import StateManager
+from mock_system.connector import MockSystemConnector
 
 
 @pytest.mark.integration
@@ -141,12 +161,12 @@ class TestMockSystemBasicIntegration:
             assert isinstance(metric.value, (int, float)), f"Invalid value type for {metric_name}"
             assert metric.timestamp is not None
         
-        # Verify metric values are reasonable
-        assert 0 <= metrics["cpu_usage"].value <= 100, "CPU usage should be 0-100%"
+        # Verify metric values are reasonable (using normalized values 0-1)
+        assert 0 <= metrics["cpu_usage"].value <= 1.0, "CPU usage should be 0-1 (normalized)"
         assert metrics["memory_usage"].value > 0, "Memory usage should be positive"
         assert metrics["response_time"].value > 0, "Response time should be positive"
         assert metrics["throughput"].value >= 0, "Throughput should be non-negative"
-        assert 0 <= metrics["error_rate"].value <= 100, "Error rate should be 0-100%"
+        assert 0 <= metrics["error_rate"].value <= 1.0, "Error rate should be 0-1 (normalized)"
         assert metrics["active_connections"].value >= 0, "Active connections should be non-negative"
         assert metrics["capacity"].value > 0, "Capacity should be positive"
     
@@ -181,8 +201,8 @@ class TestMockSystemBasicIntegration:
         
         # Collect metrics to see high load effects
         metrics = await mock_system_connector.collect_metrics()
-        initial_cpu = metrics["cpu_usage"].value
-        initial_capacity = metrics["capacity"].value
+        initial_cpu = metrics["cpu_usage"].tags.get("raw_value", metrics["cpu_usage"].value * 100)
+        initial_capacity = metrics["capacity"].tags.get("raw_value", metrics["capacity"].value * 10)
         
         # Create and execute a scale-up action
         scale_up_action = AdaptationAction(
@@ -209,7 +229,7 @@ class TestMockSystemBasicIntegration:
         
         # Collect metrics again to verify action effects
         new_metrics = await mock_system_connector.collect_metrics()
-        new_capacity = new_metrics["capacity"].value
+        new_capacity = new_metrics["capacity"].tags.get("raw_value", new_metrics["capacity"].value * 10)
         
         # Verify capacity increased
         assert new_capacity > initial_capacity, f"Capacity should have increased: {initial_capacity} -> {new_capacity}"
@@ -266,7 +286,7 @@ class TestMockSystemBasicIntegration:
         
         # Get initial state
         initial_metrics = await mock_system_connector.collect_metrics()
-        initial_capacity = initial_metrics["capacity"].value
+        initial_capacity = initial_metrics["capacity"].tags.get("raw_value", initial_metrics["capacity"].value * 10)
         
         # Execute scale-up
         scale_up = AdaptationAction(
@@ -285,7 +305,7 @@ class TestMockSystemBasicIntegration:
         
         # Verify capacity increased
         mid_metrics = await mock_system_connector.collect_metrics()
-        mid_capacity = mid_metrics["capacity"].value
+        mid_capacity = mid_metrics["capacity"].tags.get("raw_value", mid_metrics["capacity"].value * 10)
         assert mid_capacity > initial_capacity
         
         # Execute optimization
@@ -320,7 +340,7 @@ class TestMockSystemBasicIntegration:
         
         # Verify final state
         final_metrics = await mock_system_connector.collect_metrics()
-        final_capacity = final_metrics["capacity"].value
+        final_capacity = final_metrics["capacity"].tags.get("raw_value", final_metrics["capacity"].value * 10)
         
         # Should be initial + 2 - 1 = initial + 1
         expected_capacity = initial_capacity + 1
@@ -354,7 +374,8 @@ class TestMockSystemBasicIntegration:
         # Verify system is back to baseline
         await asyncio.sleep(0.1)
         reset_metrics = await mock_system_connector.collect_metrics()
-        assert reset_metrics["capacity"].value > 0, "Capacity should be positive after reset"
+        reset_capacity = reset_metrics["capacity"].tags.get("raw_value", reset_metrics["capacity"].value * 10)
+        assert reset_capacity > 0, "Capacity should be positive after reset"
 
 
 @pytest.mark.integration
@@ -432,8 +453,8 @@ class TestMockSystemScenarioIntegration:
             await asyncio.sleep(0.1)
         
         # Verify metrics are stable (within reasonable bounds)
-        cpu_values = [m["cpu_usage"].value for m in metrics_samples]
-        memory_values = [m["memory_usage"].value for m in metrics_samples]
+        cpu_values = [m["cpu_usage"].tags.get("raw_value", m["cpu_usage"].value * 100) for m in metrics_samples]
+        memory_values = [m["memory_usage"].tags.get("raw_value", m["memory_usage"].value * 8192) for m in metrics_samples]
         
         # CPU should be reasonable for normal load
         avg_cpu = sum(cpu_values) / len(cpu_values)
@@ -459,8 +480,8 @@ class TestMockSystemScenarioIntegration:
         
         # Get initial capacity
         initial_metrics = await scenario_connector.collect_metrics()
-        initial_capacity = initial_metrics["capacity"].value
-        initial_cpu = initial_metrics["cpu_usage"].value
+        initial_capacity = initial_metrics["capacity"].tags.get("raw_value", initial_metrics["capacity"].value * 10)
+        initial_cpu = initial_metrics["cpu_usage"].tags.get("raw_value", initial_metrics["cpu_usage"].value * 100)
         
         # Apply high load
         await scenario_connector.set_load(0.95)  # 95% load - should trigger scale-up
@@ -468,7 +489,7 @@ class TestMockSystemScenarioIntegration:
         
         # Collect metrics under high load
         high_load_metrics = await scenario_connector.collect_metrics()
-        high_load_cpu = high_load_metrics["cpu_usage"].value
+        high_load_cpu = high_load_metrics["cpu_usage"].tags.get("raw_value", high_load_metrics["cpu_usage"].value * 100)
         
         # Verify high load increased CPU usage
         assert high_load_cpu > initial_cpu, f"High load should increase CPU: {initial_cpu}% -> {high_load_cpu}%"
@@ -491,8 +512,8 @@ class TestMockSystemScenarioIntegration:
         
         # Verify capacity increased
         post_scale_metrics = await scenario_connector.collect_metrics()
-        post_scale_capacity = post_scale_metrics["capacity"].value
-        post_scale_cpu = post_scale_metrics["cpu_usage"].value
+        post_scale_capacity = post_scale_metrics["capacity"].tags.get("raw_value", post_scale_metrics["capacity"].value * 10)
+        post_scale_cpu = post_scale_metrics["cpu_usage"].tags.get("raw_value", post_scale_metrics["cpu_usage"].value * 100)
         
         assert post_scale_capacity > initial_capacity, f"Capacity should increase: {initial_capacity} -> {post_scale_capacity}"
         
@@ -517,9 +538,9 @@ class TestMockSystemScenarioIntegration:
         
         # Get initial metrics
         initial_metrics = await scenario_connector.collect_metrics()
-        initial_cpu = initial_metrics["cpu_usage"].value
-        initial_memory = initial_metrics["memory_usage"].value
-        initial_response_time = initial_metrics["response_time"].value
+        initial_cpu = initial_metrics["cpu_usage"].tags.get("raw_value", initial_metrics["cpu_usage"].value * 100)
+        initial_memory = initial_metrics["memory_usage"].tags.get("raw_value", initial_metrics["memory_usage"].value * 8192)
+        initial_response_time = initial_metrics["response_time"].tags.get("raw_value", initial_metrics["response_time"].value * 2000)
         
         # Execute optimization action to improve efficiency
         optimize_action = AdaptationAction(
@@ -539,8 +560,8 @@ class TestMockSystemScenarioIntegration:
         
         # Verify optimization improved resource usage
         optimized_metrics = await scenario_connector.collect_metrics()
-        optimized_cpu = optimized_metrics["cpu_usage"].value
-        optimized_memory = optimized_metrics["memory_usage"].value
+        optimized_cpu = optimized_metrics["cpu_usage"].tags.get("raw_value", optimized_metrics["cpu_usage"].value * 100)
+        optimized_memory = optimized_metrics["memory_usage"].tags.get("raw_value", optimized_metrics["memory_usage"].value * 8192)
         
         # Optimization should reduce resource usage (allowing for noise in metrics)
         # Allow up to 5% variance due to noise in the metrics simulator
@@ -565,8 +586,8 @@ class TestMockSystemScenarioIntegration:
         
         # Get metrics showing degraded performance
         degraded_metrics = await scenario_connector.collect_metrics()
-        degraded_error_rate = degraded_metrics["error_rate"].value
-        degraded_response_time = degraded_metrics["response_time"].value
+        degraded_error_rate = degraded_metrics["error_rate"].tags.get("raw_value", degraded_metrics["error_rate"].value * 100)
+        degraded_response_time = degraded_metrics["response_time"].tags.get("raw_value", degraded_metrics["response_time"].value * 2000)
         
         # Execute restart service action for recovery
         restart_action = AdaptationAction(
@@ -586,8 +607,8 @@ class TestMockSystemScenarioIntegration:
         
         # Verify recovery - metrics should improve
         recovered_metrics = await scenario_connector.collect_metrics()
-        recovered_error_rate = recovered_metrics["error_rate"].value
-        recovered_response_time = recovered_metrics["response_time"].value
+        recovered_error_rate = recovered_metrics["error_rate"].tags.get("raw_value", recovered_metrics["error_rate"].value * 100)
+        recovered_response_time = recovered_metrics["response_time"].tags.get("raw_value", recovered_metrics["response_time"].value * 2000)
         
         # After restart, error rate should be lower or similar (allowing for noise)
         # The main point is that restart should reset to baseline, not necessarily improve
@@ -596,7 +617,8 @@ class TestMockSystemScenarioIntegration:
         
         # Connections should be reasonable after restart (may not be exactly 0 due to load effects)
         # The main point is that restart action succeeded and system is functional
-        assert recovered_metrics["active_connections"].value >= 0, "Active connections should be non-negative after restart"
+        recovered_connections = recovered_metrics["active_connections"].tags.get("raw_value", recovered_metrics["active_connections"].value * 200)
+        assert recovered_connections >= 0, "Active connections should be non-negative after restart"
         
         print(f"Failure recovery: Error rate {degraded_error_rate:.2f}% -> {recovered_error_rate:.2f}%")
         print(f"Response time {degraded_response_time:.1f}ms -> {recovered_response_time:.1f}ms")
@@ -610,7 +632,7 @@ class TestMockSystemScenarioIntegration:
         
         # Get initial state
         initial_metrics = await scenario_connector.collect_metrics()
-        initial_capacity = initial_metrics["capacity"].value
+        initial_capacity = initial_metrics["capacity"].tags.get("raw_value", initial_metrics["capacity"].value * 10)
         
         # Apply moderate load
         await scenario_connector.set_load(0.6)
@@ -659,7 +681,7 @@ class TestMockSystemScenarioIntegration:
         
         # Verify final state reflects all adaptations
         final_metrics = await scenario_connector.collect_metrics()
-        final_capacity = final_metrics["capacity"].value
+        final_capacity = final_metrics["capacity"].tags.get("raw_value", final_metrics["capacity"].value * 10)
         
         # Capacity should have increased
         assert final_capacity > initial_capacity, f"Capacity should increase: {initial_capacity} -> {final_capacity}"
@@ -684,8 +706,8 @@ class TestMockSystemScenarioIntegration:
         await asyncio.sleep(0.2)
         
         initial_metrics = await scenario_connector.collect_metrics()
-        initial_cpu = initial_metrics["cpu_usage"].value
-        initial_capacity = initial_metrics["capacity"].value
+        initial_cpu = initial_metrics["cpu_usage"].tags.get("raw_value", initial_metrics["cpu_usage"].value * 100)
+        initial_capacity = initial_metrics["capacity"].tags.get("raw_value", initial_metrics["capacity"].value * 10)
         
         # Step 1: Scale up to handle load
         scale_action = AdaptationAction(
@@ -731,8 +753,8 @@ class TestMockSystemScenarioIntegration:
         
         # Verify recovery
         final_metrics = await scenario_connector.collect_metrics()
-        final_cpu = final_metrics["cpu_usage"].value
-        final_capacity = final_metrics["capacity"].value
+        final_cpu = final_metrics["cpu_usage"].tags.get("raw_value", final_metrics["cpu_usage"].value * 100)
+        final_capacity = final_metrics["capacity"].tags.get("raw_value", final_metrics["capacity"].value * 10)
         
         # System should be in better state after all interventions
         assert final_capacity > initial_capacity, f"Capacity should increase: {initial_capacity} -> {final_capacity}"
@@ -742,7 +764,7 @@ class TestMockSystemScenarioIntegration:
         await asyncio.sleep(0.2)
         
         stabilized_metrics = await scenario_connector.collect_metrics()
-        stabilized_cpu = stabilized_metrics["cpu_usage"].value
+        stabilized_cpu = stabilized_metrics["cpu_usage"].tags.get("raw_value", stabilized_metrics["cpu_usage"].value * 100)
         
         # CPU should be much better with reduced load and increased capacity
         assert stabilized_cpu < initial_cpu, f"CPU should improve after interventions: {initial_cpu}% -> {stabilized_cpu}%"

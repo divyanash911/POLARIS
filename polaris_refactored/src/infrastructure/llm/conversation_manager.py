@@ -8,7 +8,7 @@ context management, and conversation flow control.
 import asyncio
 import logging
 from typing import Dict, Any, List, Optional, Callable, Awaitable
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import uuid
 
 from .models import (
@@ -86,11 +86,16 @@ class Conversation:
 class ConversationManager:
     """Manages multiple conversations and coordinates LLM interactions with tool usage."""
     
+    # Default configuration constants
+    DEFAULT_MAX_CONVERSATIONS = 1000
+    DEFAULT_MAX_MESSAGES_PER_CONVERSATION = 100
+    
     def __init__(
         self,
         llm_client: LLMClient,
         tool_registry: ToolRegistry,
-        response_parser: ResponseParser
+        response_parser: ResponseParser,
+        max_conversations: int = DEFAULT_MAX_CONVERSATIONS
     ):
         self.llm_client = llm_client
         self.tool_registry = tool_registry
@@ -99,7 +104,8 @@ class ConversationManager:
         
         self._conversations: Dict[str, Conversation] = {}
         self._agentic_conversations: Dict[str, AgenticConversation] = {}
-        self._max_conversations = 1000
+        self._max_conversations = max_conversations
+        self._conversation_access_times: Dict[str, datetime] = {}  # For LRU eviction
     
     def create_conversation(
         self,
@@ -115,19 +121,27 @@ class ConversationManager:
         )
         
         self._conversations[conversation.conversation_id] = conversation
+        self._conversation_access_times[conversation.conversation_id] = datetime.now(timezone.utc)
         
-        # Trim conversations if exceeding max
+        # LRU eviction: remove least recently used conversation if exceeding max
         if len(self._conversations) > self._max_conversations:
-            oldest_id = min(self._conversations.keys(), 
-                          key=lambda k: self._conversations[k].created_at)
-            del self._conversations[oldest_id]
+            lru_id = min(
+                self._conversation_access_times.keys(),
+                key=lambda k: self._conversation_access_times.get(k, datetime.min.replace(tzinfo=timezone.utc))
+            )
+            del self._conversations[lru_id]
+            del self._conversation_access_times[lru_id]
+            self.logger.debug(f"Evicted LRU conversation: {lru_id}")
         
         self.logger.debug(f"Created conversation: {conversation.conversation_id}")
         return conversation
     
     def get_conversation(self, conversation_id: str) -> Optional[Conversation]:
-        """Get a conversation by ID."""
-        return self._conversations.get(conversation_id)
+        """Get a conversation by ID and update access time for LRU tracking."""
+        conversation = self._conversations.get(conversation_id)
+        if conversation:
+            self._conversation_access_times[conversation_id] = datetime.now(timezone.utc)
+        return conversation
     
     def delete_conversation(self, conversation_id: str) -> bool:
         """Delete a conversation."""

@@ -17,7 +17,7 @@ from domain.models import (
     SystemState, AdaptationAction, ExecutionResult,
     MetricValue, HealthStatus, ExecutionStatus
 )
-from src.domain.interfaces import ManagedSystemConnector
+from domain.interfaces import ManagedSystemConnector
 # Note: We use a dedicated MockMessageBroker below, not importing from message_bus
 
 

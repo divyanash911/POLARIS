@@ -11,14 +11,22 @@ import pytest
 from typing import Any, Callable, Dict, List
 
 # Import all fixtures and utilities
+import sys
+from pathlib import Path
+
+# Ensure the tests directory is in the path for fixture imports
+tests_dir = Path(__file__).parent
+if str(tests_dir) not in sys.path:
+    sys.path.insert(0, str(tests_dir))
+
 try:
-    from tests.fixtures.test_fixtures import *
-    from tests.fixtures.mock_objects import *
-    from tests.fixtures.logging_fixtures import *
-    from tests.utils.test_helpers import *
-except ImportError:
+    from fixtures.test_fixtures import *
+    from fixtures.mock_objects import *
+    from fixtures.logging_fixtures import *
+    from utils.test_helpers import *
+except ImportError as e:
     # Fallback for when imports fail - provide minimal functionality
-    pass
+    print(f"Warning: Could not import test fixtures: {e}", file=sys.stderr)
 
 
 class FakeMessageBroker:

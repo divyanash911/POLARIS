@@ -57,13 +57,13 @@ class FakePluginRegistry:
 
 
 class FakeEventBus(FakeService):
-    async def subscribe(self, *args, **kwargs):
+    def subscribe(self, *args, **kwargs):
         return "fake_sub_id"
 
     async def subscribe_to_telemetry(self, *args, **kwargs):
         return "fake_sub_id"
 
-    def unsubscribe(self, *args, **kwargs):
+    async def unsubscribe(self, *args, **kwargs):
         pass
 
 

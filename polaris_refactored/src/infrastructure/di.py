@@ -30,6 +30,7 @@ class DIContainer:
     - Factory functions
     - Interface to implementation mapping
     - Automatic constructor injection
+    - Circular dependency detection
     """
     
     def __init__(self):
@@ -37,6 +38,7 @@ class DIContainer:
         self._factories: Dict[Type, Callable] = {}
         self._singletons: Dict[Type, Any] = {}
         self._transients: set = set()
+        self._resolution_stack: set = set()  # Track resolution stack for circular dependency detection
     
     def register_singleton(self, interface: Type[T], implementation: Union[Type[T], T]) -> 'DIContainer':
         """Register a service as singleton (one instance for the entire application)."""
@@ -59,17 +61,27 @@ class DIContainer:
         return self
     
     def resolve(self, interface: Type[T]) -> T:
-        """Resolve a service instance."""
+        """Resolve a service instance with circular dependency detection."""
         # Check if already instantiated singleton
         if interface in self._singletons:
             return self._singletons[interface]
         
+        # Check for circular dependency
+        interface_name = getattr(interface, '__name__', str(interface))
+        if interface_name in self._resolution_stack:
+            cycle_path = ' -> '.join(list(self._resolution_stack) + [interface_name])
+            raise ValueError(f"Circular dependency detected: {cycle_path}")
+        
         # Check if factory exists
         if interface in self._factories:
-            instance = self._factories[interface]()
-            if interface not in self._transients:
-                self._singletons[interface] = instance
-            return instance
+            self._resolution_stack.add(interface_name)
+            try:
+                instance = self._factories[interface]()
+                if interface not in self._transients:
+                    self._singletons[interface] = instance
+                return instance
+            finally:
+                self._resolution_stack.discard(interface_name)
         
         # Check if service is registered
         if interface not in self._services:
@@ -78,7 +90,11 @@ class DIContainer:
         implementation = self._services[interface]
         
         # Create instance with dependency injection
-        instance = self._create_instance(implementation)
+        self._resolution_stack.add(interface_name)
+        try:
+            instance = self._create_instance(implementation)
+        finally:
+            self._resolution_stack.discard(interface_name)
         
         # Store singleton if not transient
         if interface not in self._transients:

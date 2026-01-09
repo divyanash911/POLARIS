@@ -16,34 +16,59 @@ import pytest
 import time
 import json
 import tempfile
+import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from unittest.mock import Mock, patch
 
+# Ensure src is in path for imports
+src_path = Path(__file__).parent.parent.parent / "src"
+if str(src_path) not in sys.path:
+    sys.path.insert(0, str(src_path))
+
 from domain.models import (
     MetricValue, SystemState, AdaptationAction, 
     ExecutionResult, HealthStatus, ExecutionStatus
 )
-from src.framework.events import TelemetryEvent, AdaptationEvent
-from src.infrastructure.observability.factory import (
+from framework.events import TelemetryEvent, AdaptationEvent
+from infrastructure.observability.factory import (
     get_polaris_logger, configure_logging, reset_logging,
     get_framework_logger, get_infrastructure_logger, get_adapter_logger
 )
-from src.framework.configuration.models import LoggingConfiguration
-from src.infrastructure.observability.logging import LogLevel
+from framework.configuration.models import LoggingConfiguration
+from infrastructure.observability.logging import LogLevel
 
-from tests.fixtures.logging_fixtures import (
+# Import fixtures from local path
+tests_path = Path(__file__).parent.parent
+if str(tests_path) not in sys.path:
+    sys.path.insert(0, str(tests_path))
+
+from fixtures.logging_fixtures import (
     integration_logging_setup, log_assertions, log_file_reader, capture_logs
 )
-from tests.integration.harness.polaris_integration_test_harness import (
+
+# Import harness from local path
+harness_path = Path(__file__).parent / "harness"
+if str(harness_path) not in sys.path:
+    sys.path.insert(0, str(harness_path))
+
+from polaris_integration_test_harness import (
     PolarisIntegrationTestHarness, create_simple_harness
 )
 
 # Import mock system components
-from polaris_refactored.mock_external_system.src.server import MockSystemServer
-from polaris_refactored.mock_external_system.src.state_manager import StateManager
-from polaris_refactored.plugins.mock_system.connector import MockSystemConnector
+mock_system_parent_path = Path(__file__).parent.parent.parent / "mock_external_system"
+if str(mock_system_parent_path) not in sys.path:
+    sys.path.insert(0, str(mock_system_parent_path))
+
+plugins_path = Path(__file__).parent.parent.parent / "plugins"
+if str(plugins_path) not in sys.path:
+    sys.path.insert(0, str(plugins_path))
+
+from src.server import MockSystemServer
+from src.state_manager import StateManager
+from mock_system.connector import MockSystemConnector
 
 
 @pytest.mark.integration
@@ -157,8 +182,11 @@ class TestTelemetryLoggingVerification:
             # Check timestamp is present and valid
             assert 'timestamp' in log_record, "Telemetry log missing timestamp"
             timestamp_str = log_record['timestamp']
-            # Verify timestamp is parseable
-            datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+            # Verify timestamp is parseable - handle both Z and +00:00 formats
+            # Replace Z only if it's at the end and there's no timezone offset already
+            if timestamp_str.endswith('Z') and '+' not in timestamp_str:
+                timestamp_str = timestamp_str.replace('Z', '+00:00')
+            datetime.fromisoformat(timestamp_str)
             
             # Check system ID is present
             extra = log_record.get('extra', {})

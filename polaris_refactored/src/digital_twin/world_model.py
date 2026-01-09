@@ -72,7 +72,6 @@ class PolarisWorldModel(ABC):
         pass
     
     @abstractmethod
-    @abstractmethod
     async def simulate_adaptation_impact(self, system_id: str, action: Any) -> SimulationResult:
         """Simulate the impact of an adaptation action."""
         pass

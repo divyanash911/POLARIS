@@ -28,6 +28,7 @@ from infrastructure.observability import (
     get_logger, get_metrics_collector, get_tracer, observe_polaris_component,
     trace_world_model_operation
 )
+from infrastructure.observability.factory import get_digital_twin_logger
 from .world_model import PolarisWorldModel, PredictionResult, SimulationResult
 from .knowledge_base import PolarisKnowledgeBase
 
@@ -709,6 +710,20 @@ Provide accurate, data-driven analysis with confidence estimates. Use structured
         if limit:
             return states[-limit:]
         return states.copy()
+    
+    def get_model_status(self) -> Dict[str, Any]:
+        """Get the current status and metadata of the LLM world model."""
+        return {
+            "type": "LLMWorldModel",
+            "llm_provider": self.llm_client.get_provider().value if self.llm_client else "unknown",
+            "model_name": self.llm_client.config.model_name if self.llm_client else "unknown",
+            "conversation_history_limit": self.conversation_history_limit,
+            "has_fallback_model": self.fallback_model is not None,
+            "has_knowledge_base": self.knowledge_base is not None,
+            "tracked_systems": len(self.system_states),
+            "total_states_cached": sum(len(states) for states in self.system_states.values()),
+            "active_conversations": len(self.conversation_history)
+        }
     
     def get_statistics(self) -> Dict[str, Any]:
         """Get statistics about the LLM world model."""

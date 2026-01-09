@@ -2,13 +2,19 @@
 Core Domain Models
 
 Defines the core data structures and value objects used throughout POLARIS.
+All models use frozen dataclasses for immutability and thread-safety.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Dict, Any, Optional, Union
 import uuid
+
+
+def _utc_now() -> datetime:
+    """Return current UTC timestamp."""
+    return datetime.now(timezone.utc)
 
 
 class HealthStatus(Enum):

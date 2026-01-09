@@ -12,8 +12,13 @@ from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
+
+
+def _utc_now() -> datetime:
+    """Return current UTC time as timezone-aware datetime."""
+    return datetime.now(timezone.utc)
 from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
 from collections import defaultdict
 
@@ -68,7 +73,7 @@ class Span:
     
     def finish(self, status: SpanStatus = SpanStatus.OK) -> None:
         """Finish the span"""
-        self.end_time = datetime.utcnow()
+        self.end_time = _utc_now()
         self.status = status
         if self.start_time and self.end_time:
             self.duration_ms = (self.end_time - self.start_time).total_seconds() * 1000
@@ -81,7 +86,7 @@ class Span:
         """Add an event to the span"""
         event = SpanEvent(
             name=name,
-            timestamp=datetime.utcnow(),
+            timestamp=_utc_now(),
             attributes=attributes or {}
         )
         self.events.append(event)
@@ -242,7 +247,7 @@ class PolarisTracer:
             span_id=span_id,
             parent_span_id=parent_span_id,
             operation_name=operation_name,
-            start_time=datetime.utcnow(),
+            start_time=_utc_now(),
             kind=kind
         )
         

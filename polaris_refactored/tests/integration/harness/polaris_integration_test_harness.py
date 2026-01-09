@@ -16,28 +16,35 @@ from typing import Any, Dict, List, Optional, Set, Callable, Union
 from dataclasses import dataclass, field
 import yaml
 
-from src.domain.interfaces import ManagedSystemConnector
+from domain.interfaces import ManagedSystemConnector
 from domain.models import (
     SystemState, AdaptationAction,
     ExecutionResult, HealthStatus, 
     ExecutionStatus, MetricValue
 )
-from src.framework.events import TelemetryEvent, AdaptationEvent
-from src.framework.polaris_framework import PolarisFramework
-from src.framework.plugin_management.plugin_registry import PolarisPluginRegistry
-from src.framework.events import PolarisEventBus
-from src.framework.configuration.builder import ConfigurationBuilder
-from src.infrastructure.di import DIContainer
-from src.infrastructure.message_bus import PolarisMessageBus
-from src.infrastructure.data_storage.data_store import PolarisDataStore
-from src.infrastructure.data_storage.storage_backend import (
+from framework.events import TelemetryEvent, AdaptationEvent
+from framework.polaris_framework import PolarisFramework
+from framework.plugin_management.plugin_registry import PolarisPluginRegistry
+from framework.events import PolarisEventBus
+from framework.configuration.builder import ConfigurationBuilder
+from infrastructure.di import DIContainer
+from infrastructure.message_bus import PolarisMessageBus
+from infrastructure.data_storage.data_store import PolarisDataStore
+from infrastructure.data_storage.storage_backend import (
     InMemoryGraphStorageBackend,
     InMemoryTimeSeriesBackend, InMemoryDocumentBackend
 )
-from src.infrastructure.observability.logging import PolarisLogger
-from src.infrastructure.observability.metrics import PolarisMetricsCollector
+from infrastructure.observability.logging import PolarisLogger
+from infrastructure.observability.metrics import PolarisMetricsCollector
 
-from tests.fixtures.mock_objects import (
+import sys
+from pathlib import Path
+# Add tests directory to path for fixtures
+_tests_path = Path(__file__).parent.parent.parent
+if str(_tests_path) not in sys.path:
+    sys.path.insert(0, str(_tests_path))
+
+from fixtures.mock_objects import (
     MockManagedSystemConnector, MockMessageBroker, MockDataStore,
     MockMetricsCollector, MockLogger, DataBuilder
 )
@@ -176,10 +183,10 @@ class PolarisIntegrationTestHarness:
         """Register real POLARIS services for performance testing."""
         try:
             # Import and register real services
-            from src.digital_twin.world_model import CompositeWorldModel
-            from src.digital_twin.knowledge_base import PolarisKnowledgeBase
-            from src.control_reasoning.adaptive_controller import PolarisAdaptiveController
-            from src.control_reasoning.reasoning_engine import PolarisReasoningEngine
+            from digital_twin.world_model import CompositeWorldModel
+            from digital_twin.knowledge_base import PolarisKnowledgeBase
+            from control_reasoning.adaptive_controller import PolarisAdaptiveController
+            from control_reasoning.reasoning_engine import PolarisReasoningEngine
             
             # Get infrastructure dependencies
             data_store = self.di_container.get("data_store")
@@ -256,7 +263,7 @@ class PolarisIntegrationTestHarness:
         # Message broker
         if self.config.enable_real_message_broker:
             # Use real NATS broker (requires NATS server running)
-            from src.infrastructure.message_bus import NATSMessageBroker
+            from infrastructure.message_bus import NATSMessageBroker
             message_broker = NATSMessageBroker("nats://localhost:4222")
         else:
             message_broker = MockMessageBroker()
@@ -372,8 +379,8 @@ class PolarisIntegrationTestHarness:
         polaris_message_bus = None
         polaris_data_store = None
 
-        from src.infrastructure.message_bus import PolarisMessageBus
-        from src.infrastructure.data_storage.data_store import PolarisDataStore as PolarisDataStoreClass
+        from infrastructure.message_bus import PolarisMessageBus
+        from infrastructure.data_storage.data_store import PolarisDataStore as PolarisDataStoreClass
 
         if message_broker is not None:
             # For tests, we create a standalone PolarisMessageBus
@@ -397,8 +404,8 @@ class PolarisIntegrationTestHarness:
                     polaris_data_store = None
 
         # Plugin registry and event bus: create instances if not present in DI
-        from src.framework.plugin_management.plugin_registry import PolarisPluginRegistry
-        from src.framework.events import PolarisEventBus
+        from framework.plugin_management.plugin_registry import PolarisPluginRegistry
+        from framework.events import PolarisEventBus
         
         plugin_registry = PolarisPluginRegistry()
         event_bus = PolarisEventBus()

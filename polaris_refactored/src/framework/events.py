@@ -199,6 +199,10 @@ class EventProcessingError(Exception):
         self.cause = cause
 
 
+# Import timedelta for correlation tracker cleanup
+from datetime import timedelta
+
+
 class PolarisEventBus(Injectable):
     """
     Comprehensive event bus for POLARIS framework with subscription management,
@@ -223,6 +227,8 @@ class PolarisEventBus(Injectable):
         self._event_history: List[PolarisEvent] = []
         self._max_history_size = 1000
         self._correlation_tracker: Dict[str, List[str]] = defaultdict(list)
+        self._correlation_timestamps: Dict[str, datetime] = {}  # Track when correlations were created
+        self._max_correlation_age = timedelta(hours=1)  # Max age for correlation entries
         self._waiters: Dict[str, asyncio.Future] = {}
         self._processing_stats = {
             "events_published": 0,
@@ -239,7 +245,7 @@ class PolarisEventBus(Injectable):
     async def start(self) -> None:
         """Start the event bus and processing workers."""
         if self._running:
-            logger.warning("Event bus is already running")
+            self.logger.warning("Event bus is already running")
             return
         
         self._running = True
@@ -305,6 +311,11 @@ class PolarisEventBus(Injectable):
         # Track correlation first (regardless of subscribers)
         if event.correlation_id:
             self._correlation_tracker[event.correlation_id].append(event.event_id)
+            self._correlation_timestamps[event.correlation_id] = datetime.now(timezone.utc)
+        
+        # Periodically clean up old correlations (every 100 events)
+        if self._processing_stats["events_processed"] % 100 == 0:
+            self._cleanup_old_correlations()
         
         event_type = type(event)
         subscription_ids = self._event_type_subscriptions.get(event_type, [])
@@ -333,13 +344,17 @@ class PolarisEventBus(Injectable):
                     "error_type": type(e).__name__
                 }, exc_info=e)
                 
-                # Retry logic
+                # Retry logic with exponential backoff
                 if event.metadata.retry_count < event.metadata.max_retries:
                     event.metadata.retry_count += 1
+                    # Exponential backoff: 1s, 2s, 4s, etc.
+                    backoff_delay = min(2 ** (event.metadata.retry_count - 1), 30)  # Cap at 30 seconds
+                    await asyncio.sleep(backoff_delay)
                     await self._event_queue.put(event)
-                    self.logger.info("Retrying event", extra={
+                    self.logger.info("Retrying event with backoff", extra={
                         "event_id": event.event_id,
-                        "attempt": event.metadata.retry_count
+                        "attempt": event.metadata.retry_count,
+                        "backoff_delay": backoff_delay
                     })
                 else:
                     self.logger.error("Event failed after retries", extra={
@@ -557,6 +572,23 @@ class PolarisEventBus(Injectable):
         self._event_history.append(event)
         if len(self._event_history) > self._max_history_size:
             self._event_history.pop(0)
+    
+    def _cleanup_old_correlations(self) -> None:
+        """Clean up old correlation entries to prevent memory leaks."""
+        now = datetime.now(timezone.utc)
+        expired_correlations = [
+            corr_id for corr_id, timestamp in self._correlation_timestamps.items()
+            if now - timestamp > self._max_correlation_age
+        ]
+        
+        for corr_id in expired_correlations:
+            del self._correlation_tracker[corr_id]
+            del self._correlation_timestamps[corr_id]
+        
+        if expired_correlations:
+            self.logger.debug("Cleaned up expired correlations", extra={
+                "count": len(expired_correlations)
+            })
     
     async def replay_events(
         self, 

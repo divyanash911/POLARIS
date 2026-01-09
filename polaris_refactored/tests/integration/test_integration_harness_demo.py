@@ -7,16 +7,33 @@ validates that the harness itself works correctly.
 
 import pytest
 import asyncio
+import sys
 from datetime import datetime, timedelta
+from pathlib import Path
 
-from tests.integration.harness.polaris_integration_test_harness import (
+# Add tests directory to path for local imports
+_tests_path = Path(__file__).parent.parent
+if str(_tests_path) not in sys.path:
+    sys.path.insert(0, str(_tests_path))
+
+# Add harness directory to path
+_harness_path = Path(__file__).parent / "harness"
+if str(_harness_path) not in sys.path:
+    sys.path.insert(0, str(_harness_path))
+
+# Add contracts directory to path
+_contracts_path = Path(__file__).parent / "contracts"
+if str(_contracts_path) not in sys.path:
+    sys.path.insert(0, str(_contracts_path))
+
+from polaris_integration_test_harness import (
     PolarisIntegrationTestHarness, IntegrationTestConfig,
     create_simple_harness, create_performance_harness, create_failure_testing_harness
 )
-from tests.integration.contracts.managed_system_connector_contract import (
+from managed_system_connector_contract import (
     MockManagedSystemConnectorContractTest, validate_connector_contract
 )
-from tests.fixtures.mock_objects import MockManagedSystemConnector, DataBuilder
+from fixtures.mock_objects import MockManagedSystemConnector, DataBuilder
 from domain.models import MetricValue, ExecutionStatus
 
 

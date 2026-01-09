@@ -141,7 +141,6 @@ if [ $VERIFY_FAILED -eq 0 ]; then
     echo ""
     echo "📚 Documentation:"
     echo "   - README.md - Project overview"
-    echo "   - TESTING_GUIDE.md - Testing instructions"
     echo ""
 else
     echo "❌ Installation verification failed"

@@ -12,9 +12,22 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Type, Optional
 from unittest.mock import patch
 
-from src.domain.interfaces import ManagedSystemConnector
+import sys
+from pathlib import Path
+
+# Add src to path for domain imports
+_src_path = Path(__file__).parent.parent.parent.parent / "src"
+if str(_src_path) not in sys.path:
+    sys.path.insert(0, str(_src_path))
+
+# Add tests to path for fixtures
+_tests_path = Path(__file__).parent.parent.parent
+if str(_tests_path) not in sys.path:
+    sys.path.insert(0, str(_tests_path))
+
+from domain.interfaces import ManagedSystemConnector
 from domain.models import AdaptationAction, ExecutionResult, ExecutionStatus, MetricValue
-from tests.fixtures.mock_objects import DataBuilder
+from fixtures.mock_objects import DataBuilder
 
 
 class ManagedSystemConnectorContract(ABC):
@@ -381,7 +394,7 @@ class MockManagedSystemConnectorContractTest(ManagedSystemConnectorContract):
     """Contract tests for MockManagedSystemConnector."""
     
     def create_connector(self) -> ManagedSystemConnector:
-        from tests.fixtures.mock_objects import MockManagedSystemConnector
+        from fixtures.mock_objects import MockManagedSystemConnector
         return MockManagedSystemConnector("test_system")
     
     def get_expected_system_id(self) -> str:

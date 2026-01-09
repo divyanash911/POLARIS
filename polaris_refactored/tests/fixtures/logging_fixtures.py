@@ -35,6 +35,28 @@ class TestLogHandler(LogHandler):
         # Add compatibility attributes for standard logging.Handler
         self.level = logging.DEBUG
     
+    def handle(self, record) -> None:
+        """Handle a log record - compatibility with standard logging.Handler."""
+        # Convert standard logging.LogRecord to dict and emit
+        if hasattr(record, 'getMessage'):
+            # Standard logging.LogRecord
+            record_dict = {
+                'level': record.levelname,
+                'message': record.getMessage(),
+                'timestamp': record.created,
+                'logger': record.name,
+                'extra': getattr(record, '__dict__', {}).get('extra', {})
+            }
+            # Copy any extra attributes
+            for key in ['component', 'correlation_id', 'system_id']:
+                if hasattr(record, key):
+                    if 'extra' not in record_dict:
+                        record_dict['extra'] = {}
+                    record_dict['extra'][key] = getattr(record, key)
+            self.emit(record_dict)
+        else:
+            self.emit(record)
+    
     def emit(self, record: Dict[str, Any]) -> None:
         """Capture log record for testing."""
         try:
