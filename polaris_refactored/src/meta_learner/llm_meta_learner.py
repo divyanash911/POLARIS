@@ -593,15 +593,125 @@ class LLMMetaLearner(BaseMetaLearner):
     async def apply_approved_proposals(
         self, proposals: List[ParameterProposal]
     ) -> List[ParameterProposal]:
-        """Apply approved proposals to the controller runtime config.
+        """Apply approved proposals to the controller configuration.
         
-        Updates the external YAML file which the controller watches for changes.
+        Updates the controller configuration using the new evolvable threshold system.
         """
-        import yaml
-        
         approved = [p for p in proposals if p.status == ProposalStatus.APPROVED]
         if not approved:
             return []
+        
+        try:
+            applied = []
+            
+            # Apply proposals directly to the adaptive controller if available
+            if self.adaptive_controller:
+                for proposal in approved:
+                    try:
+                        # Extract threshold name from parameter path
+                        # e.g., "thresholds.cpu_high" -> "cpu_high"
+                        parts = proposal.parameter_path.split(".")
+                        if len(parts) >= 2 and parts[0] == "thresholds":
+                            threshold_name = parts[1]
+                            
+                            # Use the controller's update_threshold method for evolvable thresholds
+                            success = self.adaptive_controller.update_threshold(
+                                threshold_name=threshold_name,
+                                new_value=float(proposal.proposed_value),
+                                updated_by=f"meta_learner:{self.component_id}",
+                                reason=proposal.rationale[:100],  # Truncate for storage
+                                confidence=proposal.confidence,
+                                performance_impact=None  # Will be updated later based on monitoring
+                            )
+                            
+                            if success:
+                                proposal.status = ProposalStatus.APPLIED
+                                proposal.applied_at = datetime.now(timezone.utc)
+                                applied.append(proposal)
+                                
+                                self.logger.info(
+                                    f"Applied evolvable threshold proposal {proposal.proposal_id}: "
+                                    f"{threshold_name} = {proposal.proposed_value} "
+                                    f"(confidence: {proposal.confidence:.2f})"
+                                )
+                            else:
+                                proposal.status = ProposalStatus.FAILED
+                                self.logger.warning(
+                                    f"Failed to apply threshold proposal {proposal.proposal_id}: "
+                                    f"Validation failed for {threshold_name} = {proposal.proposed_value}"
+                                )
+                        else:
+                            # Handle non-threshold parameters using legacy method
+                            success = await self._apply_legacy_proposal(proposal)
+                            if success:
+                                proposal.status = ProposalStatus.APPLIED
+                                proposal.applied_at = datetime.now(timezone.utc)
+                                applied.append(proposal)
+                            else:
+                                proposal.status = ProposalStatus.FAILED
+                                
+                    except Exception as e:
+                        self.logger.error(f"Failed to apply proposal {proposal.proposal_id}: {e}")
+                        proposal.status = ProposalStatus.FAILED
+            else:
+                # Fallback to legacy YAML file method if no controller reference
+                applied = await self._apply_legacy_proposals(approved)
+            
+            if applied:
+                self.logger.info(f"Applied {len(applied)} proposals to controller configuration")
+                
+                # Record metrics
+                self._record_metric("meta_learner.proposals_applied_success", len(applied))
+                for proposal in applied:
+                    if proposal.parameter_path.startswith("thresholds."):
+                        self._record_metric("meta_learner.threshold_evolutions", 1)
+            
+            return applied
+            
+        except Exception as e:
+            self.logger.error(f"Failed to apply proposals: {e}")
+            for p in approved:
+                p.status = ProposalStatus.FAILED
+            return []
+    
+    async def _apply_legacy_proposal(self, proposal: ParameterProposal) -> bool:
+        """Apply a single non-threshold proposal using legacy method."""
+        try:
+            # Load current config
+            config = self._get_current_controller_config()
+            
+            # Navigate to the nested key and update
+            parts = proposal.parameter_path.split(".")
+            node = config
+            for key in parts[:-1]:
+                node = node.setdefault(key, {})
+            node[parts[-1]] = proposal.proposed_value
+            
+            # Update metadata
+            config["last_updated"] = datetime.now(timezone.utc).isoformat()
+            config["updated_by"] = f"meta_learner:{self.component_id}"
+            
+            # Write back to file
+            import yaml
+            with open(self.controller_config_path, 'w', encoding='utf-8') as f:
+                yaml.safe_dump(config, f, sort_keys=False)
+            
+            # Notify controller to reload if available
+            if self.adaptive_controller:
+                self.adaptive_controller.reload_config()
+            
+            self.logger.info(
+                f"Applied legacy proposal: {proposal.parameter_path} = {proposal.proposed_value}"
+            )
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to apply legacy proposal: {e}")
+            return False
+    
+    async def _apply_legacy_proposals(self, proposals: List[ParameterProposal]) -> List[ParameterProposal]:
+        """Apply proposals using legacy YAML file method."""
+        import yaml
         
         try:
             # Load current config
@@ -609,7 +719,7 @@ class LLMMetaLearner(BaseMetaLearner):
             
             # Apply each approved proposal
             applied = []
-            for proposal in approved:
+            for proposal in proposals:
                 try:
                     # Navigate to the nested key and update
                     parts = proposal.parameter_path.split(".")
@@ -623,7 +733,7 @@ class LLMMetaLearner(BaseMetaLearner):
                     applied.append(proposal)
                     
                     self.logger.info(
-                        f"Applied proposal {proposal.proposal_id}: "
+                        f"Applied legacy proposal {proposal.proposal_id}: "
                         f"{proposal.parameter_path} = {proposal.proposed_value}"
                     )
                 except Exception as e:
@@ -638,17 +748,11 @@ class LLMMetaLearner(BaseMetaLearner):
             with open(self.controller_config_path, 'w', encoding='utf-8') as f:
                 yaml.safe_dump(config, f, sort_keys=False)
             
-            self.logger.info(f"Applied {len(applied)} proposals to controller config")
-            
-            # Notify controller to reload if available
-            if self.adaptive_controller:
-                self.adaptive_controller.reload_config()
-            
             return applied
             
         except Exception as e:
-            self.logger.error(f"Failed to apply proposals: {e}")
-            for p in approved:
+            self.logger.error(f"Failed to apply legacy proposals: {e}")
+            for p in proposals:
                 p.status = ProposalStatus.FAILED
             return []
     

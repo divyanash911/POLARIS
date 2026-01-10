@@ -1,42 +1,157 @@
-# Adaptive Controller Runtime Configuration
-# ===========================================
-# This file is the control interface between the Meta Learner and the Adaptive Controller.
-# The Meta Learner can modify controller behavior by updating values in this file.
-# Changes are detected automatically via hot-reload.
+# Adaptive Controller Enhanced Configuration
+# ==========================================
+# This file integrates with the POLARIS configuration system and supports
+# evolvable thresholds that can be modified by the Meta Learner over time.
+# Each threshold includes evolution metadata for tracking changes and performance.
 #
 # Location: config/adaptive_controller_runtime.yaml
-# DO NOT MOVE - This is a fixed location used by the meta learner interface.
+# Version: 2 (Enhanced with evolvable thresholds)
 
-version: 1
-last_updated: "2026-01-01T06:00:00Z"
+version: 2
+last_updated: "2026-01-10T12:00:00Z"
 updated_by: "system"
 
 # =============================================================================
-# Threshold Configuration
+# Evolvable Thresholds Configuration
 # =============================================================================
-# These thresholds determine when adaptation actions are triggered.
-# The meta learner can adjust these based on observed system behavior.
+# Each threshold is now an object with value, constraints, and evolution metadata.
+# The meta learner can adjust these based on observed system behavior and performance.
 
 thresholds:
   # CPU utilization thresholds
-  cpu_high: 80.0          # Scale up when CPU > this value (%)
-  cpu_low: 20.0           # Scale down when CPU < this value (%)
-  cpu_critical: 95.0      # Emergency action threshold (%)
+  cpu_high:
+    value: 80.0
+    min_value: 50.0
+    max_value: 95.0
+    metadata:
+      last_updated: "2026-01-10T12:00:00Z"
+      updated_by: "system"
+      confidence_score: 1.0
+      performance_impact: null
+      change_reason: "initial_value"
+      previous_value: null
+      evolution_count: 0
+  
+  cpu_low:
+    value: 20.0
+    min_value: 5.0
+    max_value: 50.0
+    metadata:
+      last_updated: "2026-01-10T12:00:00Z"
+      updated_by: "system"
+      confidence_score: 1.0
+      performance_impact: null
+      change_reason: "initial_value"
+      previous_value: null
+      evolution_count: 0
+  
+  cpu_critical:
+    value: 95.0
+    min_value: 85.0
+    max_value: 99.0
+    metadata:
+      last_updated: "2026-01-10T12:00:00Z"
+      updated_by: "system"
+      confidence_score: 1.0
+      performance_impact: null
+      change_reason: "initial_value"
+      previous_value: null
+      evolution_count: 0
   
   # Memory utilization thresholds  
-  memory_high: 85.0       # High memory warning (%)
-  memory_critical: 95.0   # Critical memory threshold (%)
+  memory_high:
+    value: 85.0
+    min_value: 60.0
+    max_value: 95.0
+    metadata:
+      last_updated: "2026-01-10T12:00:00Z"
+      updated_by: "system"
+      confidence_score: 1.0
+      performance_impact: null
+      change_reason: "initial_value"
+      previous_value: null
+      evolution_count: 0
+  
+  memory_critical:
+    value: 95.0
+    min_value: 85.0
+    max_value: 99.0
+    metadata:
+      last_updated: "2026-01-10T12:00:00Z"
+      updated_by: "system"
+      confidence_score: 1.0
+      performance_impact: null
+      change_reason: "initial_value"
+      previous_value: null
+      evolution_count: 0
   
   # Response time thresholds
-  response_time_warning_ms: 200.0    # Warning threshold (milliseconds)
-  response_time_critical_ms: 500.0   # Critical threshold (milliseconds)
+  response_time_warning_ms:
+    value: 200.0
+    min_value: 50.0
+    max_value: 1000.0
+    metadata:
+      last_updated: "2026-01-10T12:00:00Z"
+      updated_by: "system"
+      confidence_score: 1.0
+      performance_impact: null
+      change_reason: "initial_value"
+      previous_value: null
+      evolution_count: 0
+  
+  response_time_critical_ms:
+    value: 500.0
+    min_value: 200.0
+    max_value: 2000.0
+    metadata:
+      last_updated: "2026-01-10T12:00:00Z"
+      updated_by: "system"
+      confidence_score: 1.0
+      performance_impact: null
+      change_reason: "initial_value"
+      previous_value: null
+      evolution_count: 0
   
   # Error rate thresholds
-  error_rate_warning_pct: 5.0        # Warning threshold (%)
-  error_rate_critical_pct: 10.0      # Critical threshold (%)
+  error_rate_warning_pct:
+    value: 5.0
+    min_value: 1.0
+    max_value: 20.0
+    metadata:
+      last_updated: "2026-01-10T12:00:00Z"
+      updated_by: "system"
+      confidence_score: 1.0
+      performance_impact: null
+      change_reason: "initial_value"
+      previous_value: null
+      evolution_count: 0
+  
+  error_rate_critical_pct:
+    value: 10.0
+    min_value: 5.0
+    max_value: 30.0
+    metadata:
+      last_updated: "2026-01-10T12:00:00Z"
+      updated_by: "system"
+      confidence_score: 1.0
+      performance_impact: null
+      change_reason: "initial_value"
+      previous_value: null
+      evolution_count: 0
   
   # Throughput thresholds
-  throughput_low: 10.0               # Low throughput warning (req/s)
+  throughput_low:
+    value: 10.0
+    min_value: 1.0
+    max_value: 100.0
+    metadata:
+      last_updated: "2026-01-10T12:00:00Z"
+      updated_by: "system"
+      confidence_score: 1.0
+      performance_impact: null
+      change_reason: "initial_value"
+      previous_value: null
+      evolution_count: 0
 
 # =============================================================================
 # Strategy Configuration
@@ -77,6 +192,43 @@ cooldowns:
   config_change_seconds: 180.0    # Cooldown for configuration changes
   emergency_override: false       # If true, ignore cooldowns for critical events
 
+# =============================================================================
+# Limits Configuration
+# =============================================================================
+# Operational limits to prevent runaway adaptations.
+
+limits:
+  max_concurrent_actions: 5       # Maximum simultaneous adaptation actions
+  max_scale_factor: 3             # Maximum scaling multiplier
+  min_capacity: 1                 # Minimum system capacity
+  max_capacity: 20                # Maximum system capacity
+  max_actions_per_hour: 30        # Rate limiting for adaptations
+
+# =============================================================================
+# Feature Configuration
+# =============================================================================
+# Enable/disable specific controller features.
+
+features:
+  enable_predictive: true         # Enable predictive control strategies
+  enable_learning: true           # Enable learning-based strategies
+  enable_enhanced_assessment: true # Enable enhanced adaptation assessment
+  enable_multi_metric_evaluation: true # Enable multi-metric decision making
+  enable_action_prioritization: true # Enable action priority ranking
+  enable_fallback_actions: true   # Enable fallback action generation
+
+# =============================================================================
+# Evolution Configuration
+# =============================================================================
+# Settings for threshold evolution by the meta learner.
+
+evolution:
+  enable_threshold_evolution: true    # Allow meta learner to evolve thresholds
+  evolution_confidence_threshold: 0.7 # Minimum confidence to apply changes
+  max_evolution_rate_per_hour: 5      # Maximum threshold changes per hour
+  require_performance_validation: true # Require performance improvement validation
+  rollback_on_degradation: true      # Auto-rollback if performance degrades
+  
 # =============================================================================
 # Action Limits
 # =============================================================================
