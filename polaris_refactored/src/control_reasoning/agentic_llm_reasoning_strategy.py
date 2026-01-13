@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from .reasoning_engine import ReasoningStrategy, ReasoningContext, ReasoningResult
 from infrastructure.llm.client import LLMClient
 from infrastructure.llm.models import (
-    LLMRequest, Message, MessageRole, AgenticConversation, ToolCall, PromptTemplate
+    LLMRequest, Message, MessageRole, AgenticConversation, ToolCall, ToolCallStatus, PromptTemplate
 )
 from infrastructure.llm.tool_registry import ToolRegistry
 from infrastructure.llm.conversation_manager import ConversationManager
@@ -388,18 +388,38 @@ Use the available tools to gather information and build a comprehensive understa
                 
                 self.logger.info("=" * 80)
                 
-                # Add LLM response to conversation
-                assistant_message = Message(
-                    role=MessageRole.ASSISTANT,
-                    content=response.content,
-                    metadata={"response_id": response.response_id}
-                )
-                conversation.add_message(assistant_message)
-                
                 # Process any function calls
                 if response.function_calls:
+                    # Create assistant message WITH function calls included
+                    # This is important for Gemini which expects function calls in the model message
+                    tool_calls_for_message = [
+                        ToolCall(
+                            tool_name=fc.name,
+                            parameters=fc.arguments,
+                            call_id=fc.call_id,
+                            status=ToolCallStatus.PENDING
+                        )
+                        for fc in response.function_calls
+                    ]
+                    
+                    assistant_message = Message(
+                        role=MessageRole.ASSISTANT,
+                        content=response.content,
+                        tool_calls=tool_calls_for_message,
+                        metadata={"response_id": response.response_id}
+                    )
+                    conversation.add_message(assistant_message)
+                    
                     await self._process_function_calls(response.function_calls, conversation)
                 else:
+                    # No function calls - add regular assistant message
+                    assistant_message = Message(
+                        role=MessageRole.ASSISTANT,
+                        content=response.content,
+                        metadata={"response_id": response.response_id}
+                    )
+                    conversation.add_message(assistant_message)
+                    
                     # No more tool calls, reasoning is complete
                     self.logger.info("No more tool calls - reasoning complete")
                     conversation.complete({
@@ -495,7 +515,7 @@ Use the available tools to gather information and build a comprehensive understa
                     role=MessageRole.TOOL,
                     content=f"Tool execution failed: {str(e)}",
                     tool_call_id=func_call.call_id,
-                    metadata={"error": True}
+                    metadata={"error": True, "tool_name": func_call.name}
                 )
                 conversation.add_message(error_message)
     

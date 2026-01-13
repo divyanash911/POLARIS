@@ -7,7 +7,6 @@ This module provides the StateManager class that handles:
 - State validation and consistency checks
 - Baseline configuration loading from YAML
 
-Requirements: 1.4, 1.5
 """
 
 import copy

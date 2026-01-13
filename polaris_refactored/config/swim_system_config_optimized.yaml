@@ -1,4 +1,4 @@
-# POLARIS Framework Configuration for SWIM System
+# POLARIS Framework Configuration for SWIM System - OPTIMIZED
 # Complete production-ready configuration for running SWIM with:
 # - Threshold-based reactive strategy with enhanced rules
 # - Agentic LLM reasoning using Google AI (Gemini)
@@ -12,11 +12,23 @@ framework:
   version: "2.0.0"
   environment: "development"
   
-  # Core Framework Settings
+  # Framework startup configuration
   startup_timeout_seconds: 120
   shutdown_timeout_seconds: 60
-  health_check_interval_seconds: 30
-  component_startup_delay_seconds: 5
+  enable_graceful_shutdown: true
+  
+  # Component initialization order
+  initialization_order:
+    - "message_bus"
+    - "data_store"
+    - "plugin_registry"
+    - "event_bus"
+    - "knowledge_base"
+    - "world_model"
+    - "reasoning_engine"
+    - "adaptive_controller"
+    - "meta_learner"
+    - "adapters"
   
   # NATS Message Bus Configuration
   nats_config:
@@ -26,23 +38,27 @@ framework:
     password: null
     token: null
     timeout: 30
-    connection_attempts: 10
+    connection_attempts: 5
     reconnect_time_wait: 2
     max_reconnect_attempts: 60
-    enable_jetstream: false
-    max_payload: 1048576  # 1MB
+    enable_jetstream: true
+    jetstream_domain: "polaris"
     
   # Enhanced Telemetry Configuration
   telemetry_config:
     enabled: true
-    collection_interval: 3   # More frequent for better responsiveness
-    batch_size: 50          # Optimized batch size
-    retention_days: 30      # Extended retention for learning
+    collection_interval: 5   # More frequent for better responsiveness
+    batch_size: 100         # Larger batches for efficiency
+    retention_days: 14      # Extended retention for learning
     enable_compression: true
     enable_buffering: true
     buffer_size: 1000
-    flush_interval_seconds: 10
-    enable_metrics_validation: true
+    
+    # Telemetry subjects
+    stream_subject: "polaris.telemetry.events.stream"
+    batch_subject: "polaris.telemetry.events.batch"
+    batch_max_wait: 5.0
+    queue_maxsize: 5000
     
   # Comprehensive Logging Configuration
   logging_config:
@@ -54,21 +70,27 @@ framework:
     backup_count: 10
     enable_correlation_ids: true
     enable_structured_context: true
-    enable_performance_logging: true
-    log_rotation: "daily"
+    
+    # Component-specific log levels
+    component_levels:
+      "polaris.framework": "INFO"
+      "polaris.llm": "DEBUG"
+      "polaris.agentic_llm_reasoning": "DEBUG"
+      "polaris.threshold_reactive": "DEBUG"
+      "polaris.world_model": "DEBUG"
+      "polaris.knowledge_base": "INFO"
+      "polaris.swim_connector": "DEBUG"
+      "polaris.adaptive_controller": "DEBUG"
+      "polaris.meta_learner": "INFO"
     
   # Framework Settings
   plugin_search_paths:
     - "./plugins"
     - "./plugins/swim"
-    - "./src/plugins"
-  max_concurrent_adaptations: 5  # Optimized for stability
-  adaptation_timeout: 300        # Extended timeout for LLM reasoning
+  max_concurrent_adaptations: 8  # Increased for better throughput
+  adaptation_timeout: 180        # Extended timeout for LLM reasoning
   enable_hot_reload: true
   enable_plugin_validation: true
-  enable_circuit_breaker: true
-  circuit_breaker_failure_threshold: 5
-  circuit_breaker_recovery_timeout: 60
 
 # Managed Systems Configuration
 managed_systems:
@@ -84,6 +106,7 @@ managed_systems:
       port: 4242
       connection_pool_size: 5
       keep_alive: true
+      timeout: 30.0
       
     # Enhanced SWIM Implementation Configuration
     implementation:
@@ -124,39 +147,30 @@ llm:
   api_endpoint: "https://generativelanguage.googleapis.com"
   api_key: "${GOOGLE_AI_API_KEY}"  # Set this environment variable
   model_name: "gemini-2.0-flash-exp"  # Latest model for better performance
-  max_tokens: 8000            # Increased for complex reasoning
+  max_tokens: 4000            # Increased for complex reasoning
   temperature: 0.1            # Low temperature for consistent decisions
   top_p: 0.9                 # Nucleus sampling for quality
-  top_k: 40                  # Token selection diversity
-  timeout: 120.0             # Extended timeout for complex reasoning
-  max_retries: 3             # Balanced retries for reliability
-  retry_delay: 2.0
-  cache_ttl: 300             # 5 minutes cache for efficiency
+  timeout: 90.0              # Extended timeout for complex reasoning
+  max_retries: 5             # More retries for reliability
+  retry_delay: 3.0
+  cache_ttl: 600             # 10 minutes cache for efficiency
   enable_function_calling: true
   enable_streaming: false    # Disable for deterministic responses
   enable_safety_settings: true
   
   # LLM Performance Optimization
   request_batching:
-    enabled: false           # Disable for real-time responses
-    batch_size: 1
-    batch_timeout: 1.0
+    enabled: true
+    batch_size: 3
+    batch_timeout: 5.0
   
   # LLM Monitoring
   monitoring:
     enable_token_tracking: true
     enable_latency_tracking: true
     enable_error_tracking: true
-    enable_cost_tracking: true
     log_requests: true
     log_responses: false     # Avoid logging sensitive data
-    
-  # Circuit Breaker for LLM API
-  circuit_breaker:
-    enabled: true
-    failure_threshold: 5
-    recovery_timeout: 120
-    half_open_max_calls: 3
 
 # Enhanced Control & Reasoning Configuration
 control_reasoning:
@@ -172,397 +186,22 @@ control_reasoning:
     enable_strategy_fusion: true    # Combine multiple strategies
     strategy_selection_mode: "hybrid"  # Use multiple strategies together
     
-    # Strategy Weights for Fusion (must sum to 1.0)
+    # Strategy Weights for Fusion
     strategy_weights:
-      threshold_reactive: 0.5
-      agentic_llm_reasoning: 0.3
+      threshold_reactive: 0.4
+      agentic_llm_reasoning: 0.4
       statistical_world_model: 0.2
     
     # Enhanced Assessment Configuration
     enhanced_assessment:
       enable_trend_analysis: true
-      trend_window_minutes: 15
+      trend_window_minutes: 10
       enable_prediction: true
-      prediction_horizon_minutes: 10
+      prediction_horizon_minutes: 5
       enable_confidence_scoring: true
       min_confidence_threshold: 0.6
-      enable_anomaly_detection: true
-      anomaly_threshold: 2.0
     
   # Enhanced Threshold Reactive Strategy Configuration
-  threshold_reactive:
-    enabled: true
-    enable_multi_metric_evaluation: true
-    action_prioritization_enabled: true
-    max_concurrent_actions: 3
-    default_cooldown_seconds: 60.0
-    enable_fallback: true
-    
-    # Threshold Rules for SWIM
-    rules:
-      # High CPU/Server Utilization - Scale Up
-      - rule_id: "high_utilization_scale_up"
-        name: "High Server Utilization Scale Up"
-        description: "Scale up when server utilization is high"
-        enabled: true
-        priority: 3
-        cooldown_seconds: 120.0
-        logical_operator: "and"
-        action_type: "ADD_SERVER"
-        action_parameters:
-          reason: "high_utilization"
-        conditions:
-          - metric_name: "server_utilization"
-            operator: "gt"
-            value: 0.8
-            weight: 1.0
-            description: "Server utilization above 80%"
-          - metric_name: "server_count"
-            operator: "lt"
-            value: 10  # Don't scale beyond 10 servers
-            weight: 0.5
-            
-      # Low Server Utilization - Scale Down
-      - rule_id: "low_utilization_scale_down"
-        name: "Low Server Utilization Scale Down"
-        description: "Scale down when server utilization is low"
-        enabled: true
-        priority: 2
-        cooldown_seconds: 180.0
-        logical_operator: "and"
-        action_type: "REMOVE_SERVER"
-        action_parameters:
-          reason: "low_utilization"
-        conditions:
-          - metric_name: "server_utilization"
-            operator: "lt"
-            value: 0.3
-            weight: 1.0
-            description: "Server utilization below 30%"
-          - metric_name: "server_count"
-            operator: "gt"
-            value: 1  # Keep at least 1 server
-            weight: 0.5
-            
-      # High Response Time - Adjust QoS
-      - rule_id: "high_response_time_qos"
-        name: "High Response Time QoS Adjustment"
-        description: "Adjust dimmer when response time is high"
-        enabled: true
-        priority: 2
-        cooldown_seconds: 60.0
-        logical_operator: "or"
-        action_type: "SET_DIMMER"
-        action_parameters:
-          value: 0.7
-          reason: "high_response_time"
-        conditions:
-          - metric_name: "basic_response_time"
-            operator: "gt"
-            value: 1000  # milliseconds
-            weight: 1.0
-          - metric_name: "optional_response_time"
-            operator: "gt"
-            value: 2000  # milliseconds
-            weight: 0.8
-            
-      # Critical Server Count - Emergency Scale Up
-      - rule_id: "critical_server_count"
-        name: "Critical Server Count Emergency"
-        description: "Emergency scale up when server count is critically low"
-        enabled: true
-        priority: 5
-        cooldown_seconds: 30.0
-        logical_operator: "and"
-        action_type: "ADD_SERVER"
-        action_parameters:
-          reason: "critical_server_count"
-          urgent: true
-        conditions:
-          - metric_name: "active_servers"
-            operator: "lte"
-            value: 1
-            weight: 2.0
-            description: "Only 1 or fewer active servers"
-            
-    # Severity Weights
-    severity_weights:
-      critical: 3.0
-      high: 2.0
-      medium: 1.0
-      low: 0.5
-
-  # Enhanced Agentic LLM Reasoning Strategy Configuration
-  agentic_llm_reasoning:
-    enabled: true
-    max_iterations: 8          # Balanced for performance
-    confidence_threshold: 0.7  # Higher threshold for reliability
-    enable_tool_usage: true
-    enable_context_management: true
-    enable_multi_step_reasoning: true
-    enable_explanation_generation: true
-    conversation_timeout_seconds: 300
-    
-    # Reasoning Configuration
-    reasoning_config:
-      enable_causal_analysis: true
-      enable_trend_analysis: true
-      enable_impact_assessment: true
-      enable_risk_evaluation: true
-      context_window_size: 25
-      max_reasoning_depth: 4
-      enable_reasoning_cache: true
-      cache_ttl_seconds: 600
-    
-    # Available Tools for LLM Reasoning
-    available_tools:
-      - "system_state"
-      - "world_model"
-      - "knowledge_base"
-      - "action_validation"
-      - "historical_analysis"
-      - "trend_prediction"
-      - "impact_simulation"
-      - "metric_analysis"
-    
-    # LLM Reasoning Prompts Configuration
-    prompts:
-      system_prompt_template: "swim_system_reasoning"
-      analysis_prompt_template: "swim_analysis"
-      decision_prompt_template: "swim_decision"
-      explanation_prompt_template: "swim_explanation"
-      
-    # Fallback Configuration
-    fallback:
-      enabled: true
-      fallback_strategy: "threshold_reactive"
-      fallback_on_timeout: true
-      fallback_on_error: true
-      fallback_confidence_threshold: 0.3
-
-# Enhanced Digital Twin Configuration
-digital_twin:
-  # Enhanced Statistical World Model Configuration
-  world_model:
-    type: "composite_world_model"  # Use composite for better accuracy
-    enabled: true
-    conversation_history_limit: 30  # Increased for better context
-    enable_fallback_model: true
-    fallback_model_type: "statistical"
-    
-    # Composite Model Configuration
-    composite_model:
-      models:
-        - type: "statistical"
-          weight: 0.6
-        - type: "llm_world_model"
-          weight: 0.4
-      enable_model_selection: true
-      selection_criteria: "confidence"
-    
-    # Statistical Model Configuration
-    statistical_model:
-      enable_trend_analysis: true
-      trend_window_size: 100
-      enable_seasonality_detection: true
-      seasonality_periods: [60, 300, 1800, 3600]  # 1min, 5min, 30min, 1hr patterns
-      enable_anomaly_detection: true
-      anomaly_threshold: 2.5
-      enable_correlation_analysis: true
-      correlation_window_size: 200
-      correlation_threshold: 0.7
-      
-    # LLM World Model Configuration
-    llm_world_model:
-      enable_prediction_caching: true
-      cache_ttl_seconds: 300
-      enable_simulation_validation: true
-      max_simulation_scenarios: 5
-      
-    # Prediction Configuration
-    prediction:
-      enable_short_term: true
-      short_term_horizon_minutes: 5
-      enable_medium_term: true
-      medium_term_horizon_minutes: 30
-      enable_long_term: false
-      long_term_horizon_minutes: 120
-      enable_confidence_intervals: true
-      confidence_level: 0.95
-      min_data_points_for_prediction: 10
-      
-    # Model Update Configuration
-    model_update:
-      update_frequency_minutes: 1
-      min_data_points: 15
-      enable_online_learning: true
-      learning_rate: 0.05
-      enable_model_validation: true
-      validation_split: 0.2
-    
-  # Enhanced Knowledge Base Configuration
-  knowledge_base:
-    enabled: true
-    max_patterns: 5000         # Increased capacity
-    pattern_confidence_threshold: 0.6
-    enable_pattern_evolution: true
-    enable_relationship_tracking: true
-    enable_temporal_analysis: true
-    
-    # Pattern Recognition Configuration
-    pattern_recognition:
-      enable_sequence_patterns: true
-      sequence_min_length: 3
-      sequence_max_length: 15
-      enable_correlation_patterns: true
-      correlation_threshold: 0.7
-      enable_temporal_patterns: true
-      temporal_window_minutes: 120
-      enable_causal_patterns: true
-      causal_confidence_threshold: 0.8
-      
-    # Data Retention Configuration
-    data_retention:
-      system_states_days: 60
-      adaptation_actions_days: 180
-      execution_results_days: 180
-      learned_patterns_days: 365
-      telemetry_events_days: 30
-      
-    # Performance Configuration
-    performance:
-      enable_indexing: true
-      enable_caching: true
-      cache_size: 2000
-      cache_ttl_seconds: 1800
-      enable_compression: true
-      compression_threshold: 1000
-    
-  # Enhanced Learning Engine Configuration
-  learning_engine:
-    enabled: true
-    learning_strategies:
-      - "pattern_recognition"
-      - "reinforcement_learning"
-      - "causal_inference"
-      - "anomaly_detection"
-      - "trend_analysis"
-    max_learned_knowledge: 2000
-    learning_update_interval_minutes: 5
-    
-    # Reinforcement Learning Configuration
-    reinforcement_learning:
-      enable_q_learning: true
-      learning_rate: 0.1
-      discount_factor: 0.95
-      exploration_rate: 0.15
-      exploration_decay: 0.995
-      min_exploration_rate: 0.01
-      enable_experience_replay: true
-      replay_buffer_size: 1000
-      
-    # Causal Inference Configuration
-    causal_inference:
-      enable_causal_discovery: true
-      causal_window_size: 200
-      causal_confidence_threshold: 0.8
-      enable_intervention_analysis: true
-      
-    # Pattern Recognition Configuration
-    pattern_recognition:
-      enable_clustering: true
-      clustering_algorithm: "kmeans"
-      max_clusters: 20
-      enable_classification: true
-      classification_threshold: 0.75
-
-# Data Storage Configuration
-data_storage:
-  # Use in-memory storage for development
-  backends:
-    time_series: "in_memory"
-    document: "in_memory"
-    graph: "in_memory"
-  
-  # Repository Configuration
-  repositories:
-    system_state:
-      retention_hours: 168  # 1 week
-      max_entries: 10000
-    adaptation_actions:
-      retention_hours: 720  # 30 days
-      max_entries: 5000
-    execution_results:
-      retention_hours: 720  # 30 days
-      max_entries: 5000
-
-# Event Bus Configuration
-event_bus:
-  max_queue_size: 5000
-  worker_count: 4
-  enable_event_history: true
-  event_history_limit: 1000
-
-# Observability Configuration
-observability:
-  service_name: "polaris-swim"
-  enable_metrics: true
-  enable_tracing: true
-  enable_logging: true
-  
-  # Metrics Configuration
-  metrics:
-    collection_interval: 10  # Reduced for testing
-    export_interval: 20     # Reduced for testing
-    enable_system_metrics: true
-    enable_adaptation_metrics: true
-    enable_llm_metrics: true
-    
-  # Tracing Configuration
-  tracing:
-    sample_rate: 0.1  # 10% sampling for development
-    enable_adaptation_tracing: true
-    enable_llm_tracing: true
-    
-  # Logging Configuration
-  logging:
-    enable_structured_logging: true
-    log_level: "INFO"
-    enable_correlation_ids: true
-
-# Plugin Configuration
-plugins:
-  swim:
-    enabled: true
-    auto_load: true
-    config_validation: true
-
-# Environment-specific Overrides
-development:
-  framework:
-    logging_config:
-      level: "DEBUG"
-      format: "text"
-  llm:
-    cache_ttl: 60  # Shorter cache for development
-  observability:
-    tracing:
-      sample_rate: 1.0  # 100% sampling for development
-
-production:
-  framework:
-    logging_config:
-      level: "INFO"
-      output: "file"
-  llm:
-    temperature: 0.05  # More deterministic in production
-    cache_ttl: 900  # Longer cache for production
-  control_reasoning:
-    threshold_reactive:
-      default_cooldown_seconds: 120.0  # Longer cooldowns in production
-  observability:
-    tracing:
-      sample_rate: 0.05  # Lower sampling in production
   threshold_reactive:
     enabled: true
     enable_multi_metric_evaluation: true
@@ -658,34 +297,6 @@ production:
             weight: 2.2
             description: "Error rate above 5%"
             
-      # Moderate Utilization Scale Up - Medium Priority
-      - rule_id: "moderate_utilization_scale_up"
-        name: "Moderate Utilization Proactive Scale Up"
-        description: "Proactive scaling when utilization is moderately high"
-        enabled: true
-        priority: 5
-        cooldown_seconds: 120.0
-        logical_operator: "and"
-        action_type: "ADD_SERVER"
-        action_parameters:
-          count: 1
-          reason: "moderate_utilization_proactive"
-        conditions:
-          - metric_name: "server_utilization"
-            operator: "between"
-            value: [0.65, 0.75]
-            weight: 1.5
-            description: "Server utilization between 65-75%"
-          - metric_name: "request_rate"
-            operator: "gt"
-            value: 100
-            weight: 1.2
-            description: "High request rate"
-          - metric_name: "server_count"
-            operator: "lt"
-            value: 12
-            weight: 1.0
-            
       # Low Utilization Scale Down - Medium Priority
       - rule_id: "low_utilization_scale_down"
         name: "Low Server Utilization Scale Down"
@@ -714,58 +325,6 @@ production:
             value: 400
             weight: 1.0
             description: "Response time is good"
-            
-      # QoS Optimization - Medium Priority
-      - rule_id: "qos_optimization_increase"
-        name: "QoS Optimization Increase"
-        description: "Increase QoS when system is performing well"
-        enabled: true
-        priority: 3
-        cooldown_seconds: 90.0
-        logical_operator: "and"
-        action_type: "SET_DIMMER"
-        action_parameters:
-          value: 0.9
-          reason: "qos_optimization"
-        conditions:
-          - metric_name: "server_utilization"
-            operator: "lt"
-            value: 0.5
-            weight: 1.5
-            description: "Low server utilization"
-          - metric_name: "basic_response_time"
-            operator: "lt"
-            value: 300
-            weight: 1.8
-            description: "Good response time"
-          - metric_name: "error_rate"
-            operator: "lt"
-            value: 0.01
-            weight: 2.0
-            description: "Low error rate"
-            
-      # Memory Pressure Response - Medium Priority
-      - rule_id: "memory_pressure_response"
-        name: "Memory Pressure Response"
-        description: "Respond to memory pressure with scaling"
-        enabled: true
-        priority: 6
-        cooldown_seconds: 90.0
-        logical_operator: "and"
-        action_type: "ADD_SERVER"
-        action_parameters:
-          count: 1
-          reason: "memory_pressure"
-        conditions:
-          - metric_name: "memory_usage"
-            operator: "gt"
-            value: 0.85
-            weight: 2.5
-            description: "Memory usage above 85%"
-          - metric_name: "server_count"
-            operator: "lt"
-            value: 12
-            weight: 1.0
             
     # Enhanced Severity Weights
     severity_weights:

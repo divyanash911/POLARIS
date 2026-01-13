@@ -7,7 +7,6 @@ This module provides the MetricsSimulator class that handles:
 - Applying action effects (scale up/down, optimization)
 - Maintaining metric consistency with system state
 
-Requirements: 1.3, 2.1, 2.2, 2.3
 """
 
 import random

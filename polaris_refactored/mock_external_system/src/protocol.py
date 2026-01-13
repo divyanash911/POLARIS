@@ -13,7 +13,6 @@ Protocol Format:
   - status: OK or ERROR
   - data: JSON-encoded response data
 
-Requirements: 1.1
 """
 
 import json

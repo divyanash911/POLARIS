@@ -9,7 +9,6 @@ It tests:
 - TCP server command processing
 - Configuration loading
 
-Requirements: 3.2
 """
 
 import asyncio

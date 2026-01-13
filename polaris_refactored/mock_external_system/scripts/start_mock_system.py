@@ -144,6 +144,9 @@ async def main():
     logger = setup_logging(args.log_level)
     logger.info("Starting mock external system")
     
+    # Initialize server variable before try block to prevent NameError in finally
+    server = None
+    
     try:
         # Load configuration
         logger.info(f"Loading configuration from {args.config}")
@@ -210,10 +213,13 @@ async def main():
         sys.exit(1)
     finally:
         logger.info("Shutting down mock system server")
-        try:
-            await server.stop()
-        except Exception as e:
-            logger.error(f"Error during shutdown: {e}")
+        if server is not None:
+            try:
+                await server.stop()
+            except Exception as e:
+                logger.error(f"Error during shutdown: {e}")
+        else:
+            logger.info("Server was not initialized, skipping stop")
 
 
 if __name__ == '__main__':

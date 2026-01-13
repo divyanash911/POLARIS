@@ -628,21 +628,44 @@ class GoogleClient(LLMClient):
                             }
                         })
                 
-                contents.append({
-                    "role": "model",
-                    "parts": parts
-                })
+                # Only add assistant message if it has content
+                if parts:
+                    contents.append({
+                        "role": "model",
+                        "parts": parts
+                    })
             elif msg.role == MessageRole.TOOL:
-                # Tool response
-                contents.append({
-                    "role": "function",
-                    "parts": [{
-                        "functionResponse": {
-                            "name": msg.tool_call_id or "unknown_function",
-                            "response": {"result": msg.content}
-                        }
-                    }]
-                })
+                # Tool response - handle both single and multiple responses
+                # Gemini requires all function responses to be in a single message
+                # with the same number of parts as function calls
+                
+                if msg.metadata.get("multiple_tool_responses"):
+                    # Multiple tool responses - create multiple functionResponse parts
+                    parts = []
+                    for tool_resp in msg.metadata.get("tool_responses", []):
+                        parts.append({
+                            "functionResponse": {
+                                "name": tool_resp["tool_name"],
+                                "response": {"result": str(tool_resp["result"]) if tool_resp["success"] else f"Error: {tool_resp.get('error', 'Unknown error')}"}
+                            }
+                        })
+                    if parts:
+                        contents.append({
+                            "role": "function",
+                            "parts": parts
+                        })
+                else:
+                    # Single tool response
+                    function_name = msg.metadata.get("tool_name") or msg.tool_call_id or "unknown_function"
+                    contents.append({
+                        "role": "function",
+                        "parts": [{
+                            "functionResponse": {
+                                "name": function_name,
+                                "response": {"result": msg.content}
+                            }
+                        }]
+                    })
         
         # Build request data
         data = {
@@ -763,9 +786,37 @@ class GoogleClient(LLMClient):
         """Parse Google AI API response."""
         try:
             candidates = response_data.get("candidates", [])
+            
+            # Check for blocked prompts or safety issues
             if not candidates:
+                # Log the full response for debugging
+                self.logger.warning(f"No candidates in response. Full response: {response_data}")
+                
+                # Check for prompt feedback (safety blocking)
+                prompt_feedback = response_data.get("promptFeedback", {})
+                block_reason = prompt_feedback.get("blockReason")
+                safety_ratings = prompt_feedback.get("safetyRatings", [])
+                
+                if block_reason:
+                    raise LLMResponseParsingError(
+                        f"Prompt blocked by Gemini: {block_reason}. Safety ratings: {safety_ratings}",
+                        response_content=str(response_data),
+                        expected_format="Google AI response format",
+                        provider=self.get_provider().value
+                    )
+                
+                # Check if there's a finishReason at the top level (some error cases)
+                if "error" in response_data:
+                    error_info = response_data["error"]
+                    raise LLMResponseParsingError(
+                        f"Gemini API error: {error_info.get('message', 'Unknown error')}",
+                        response_content=str(response_data),
+                        expected_format="Google AI response format",
+                        provider=self.get_provider().value
+                    )
+                
                 raise LLMResponseParsingError(
-                    "No candidates in Google response",
+                    "No candidates in Google response (possibly empty or filtered)",
                     response_content=str(response_data),
                     expected_format="Google AI response format",
                     provider=self.get_provider().value

@@ -3,12 +3,11 @@ Observability and Logging Tests for Mock External System Testing
 
 This module provides comprehensive tests for observability and logging functionality
 in the context of mock external system testing, validating:
-- Telemetry logging verification (Requirements 7.1)
-- Adaptation logging verification (Requirements 7.2)
-- Error logging verification (Requirements 7.3)
-- Metrics export verification (Requirements 7.4)
+- Telemetry logging verification 
+- Adaptation logging verification 
+- Error logging verification 
+- Metrics export verification 
 
-Requirements: 7.1, 7.2, 7.3, 7.4
 """
 
 import asyncio
@@ -73,7 +72,7 @@ from mock_system.connector import MockSystemConnector
 
 @pytest.mark.integration
 class TestTelemetryLoggingVerification:
-    """Test telemetry logging verification (Requirements 7.1)."""
+    """Test telemetry logging verification """
     
     @pytest.fixture
     async def mock_system_with_logging(self):
@@ -275,7 +274,7 @@ class TestTelemetryLoggingVerification:
 
 @pytest.mark.integration
 class TestAdaptationLoggingVerification:
-    """Test adaptation logging verification (Requirements 7.2)."""
+    """Test adaptation logging verification """
     
     @pytest.fixture
     async def mock_system_with_adaptation_logging(self):
@@ -541,7 +540,7 @@ if __name__ == "__main__":
 
 @pytest.mark.integration
 class TestErrorLoggingVerification:
-    """Test error logging verification (Requirements 7.3)."""
+    """Test error logging verification """
     
     @pytest.fixture
     async def mock_system_with_error_logging(self):
@@ -773,7 +772,7 @@ class TestErrorLoggingVerification:
 
 @pytest.mark.integration
 class TestMetricsExportVerification:
-    """Test metrics export verification (Requirements 7.4)."""
+    """Test metrics export verification """
     
     @pytest.fixture
     async def mock_system_with_metrics_export(self):

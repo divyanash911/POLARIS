@@ -7,7 +7,6 @@ This module provides the ActionHandler class that handles:
 - Action validation with constraint checking
 - Integration with state manager and metrics simulator
 
-Requirements: 1.4, 2.2, 2.3
 """
 
 from dataclasses import dataclass

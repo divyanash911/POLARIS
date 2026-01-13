@@ -294,9 +294,28 @@ class ConversationManager:
                 if tool:
                     tools.append(tool.get_openai_format())
         
+        # Build messages with system prompt for proper conversation flow
+        messages = []
+        
+        # Add system message if not already present
+        has_system_message = any(m.role == MessageRole.SYSTEM for m in conversation.messages)
+        if not has_system_message:
+            objective = conversation.context.get("objective", "Analyze the system and provide recommendations")
+            system_content = f"""You are an intelligent system analysis assistant. Your objective is: {objective}
+
+You have access to tools to query system state, knowledge base, and world model.
+Use the tools to gather information, then provide your analysis and recommendations.
+When you have gathered enough information, provide a clear summary of your findings.
+
+Available tools: {', '.join(available_tools) if available_tools else 'None'}"""
+            messages.append(Message(role=MessageRole.SYSTEM, content=system_content))
+        
+        # Add all conversation messages
+        messages.extend(conversation.messages)
+        
         # Create LLM request
         request = LLMRequest(
-            messages=conversation.messages,
+            messages=messages,
             model_name=self.llm_client.config.model_name,
             max_tokens=self.llm_client.config.max_tokens,
             temperature=self.llm_client.config.temperature,
@@ -309,34 +328,64 @@ class ConversationManager:
         # Parse response
         parsed = self.response_parser.parse_agentic_response(response)
         
-        # Add assistant message
-        assistant_message = Message(
-            role=MessageRole.ASSISTANT,
-            content=response.content,
-            metadata={"parsed": parsed}
-        )
-        conversation.add_message(assistant_message)
-        
-        # Handle function calls
+        # Handle function calls - need to include them in the assistant message for proper conversation flow
         if response.function_calls:
+            # Create assistant message WITH function calls included
+            # This is important for Gemini which expects function calls in the model message
+            tool_calls_for_message = [
+                ToolCall(
+                    tool_name=fc.name,
+                    parameters=fc.arguments,
+                    call_id=fc.call_id,
+                    status=ToolCallStatus.PENDING
+                )
+                for fc in response.function_calls
+            ]
+            
+            assistant_message = Message(
+                role=MessageRole.ASSISTANT,
+                content=response.content,
+                tool_calls=tool_calls_for_message,
+                metadata={"parsed": parsed}
+            )
+            conversation.add_message(assistant_message)
+            
+            # Now handle the function calls (execute them and add responses)
             await self._handle_function_calls(conversation, response.function_calls)
-        
-        # Handle tool usage from text
-        elif parsed.get("tool_usage"):
-            await self._handle_text_tool_usage(conversation, parsed["tool_usage"])
-        
-        # Check for completion
-        elif parsed.get("tool_usage", {}).get("action") == "final_answer":
-            result = parsed["tool_usage"].get("result", {})
-            conversation.complete(result)
+        else:
+            # No function calls - add regular assistant message
+            assistant_message = Message(
+                role=MessageRole.ASSISTANT,
+                content=response.content,
+                metadata={"parsed": parsed}
+            )
+            conversation.add_message(assistant_message)
+            
+            # Handle tool usage from text
+            if parsed.get("tool_usage"):
+                await self._handle_text_tool_usage(conversation, parsed["tool_usage"])
+            
+            # Check for completion
+            elif parsed.get("tool_usage", {}).get("action") == "final_answer":
+                result = parsed["tool_usage"].get("result", {})
+                conversation.complete(result)
     
     async def _handle_function_calls(
         self,
         conversation: AgenticConversation,
         function_calls: List
     ) -> None:
-        """Handle function calls from LLM response."""
+        """Handle function calls from LLM response.
+        
+        IMPORTANT: For Gemini API, all function responses must be sent together
+        in a single message with multiple parts. This ensures the number of
+        function response parts equals the number of function call parts.
+        """
+        # Collect all tool results first
+        tool_results = []
+        
         for func_call in function_calls:
+            # Create initial tool call with EXECUTING status
             tool_call = ToolCall(
                 tool_name=func_call.name,
                 parameters=func_call.arguments,
@@ -350,17 +399,74 @@ class ConversationManager:
             # Execute tool
             result = await self.tool_registry.execute_tool_call(tool_call)
             
-            # Update tool call status
-            tool_call.status = ToolCallStatus.SUCCESS if result.success else ToolCallStatus.FAILED
-            tool_call.result = result.result
-            tool_call.error_message = result.error_message
+            # Since ToolCall is frozen, we create a new one with updated status
+            # and replace it in the conversation's tool_calls list
+            updated_tool_call = ToolCall(
+                tool_name=func_call.name,
+                parameters=func_call.arguments,
+                call_id=func_call.call_id,
+                status=ToolCallStatus.SUCCESS if result.success else ToolCallStatus.FAILED,
+                result=result.result,
+                error_message=result.error_message,
+                execution_time=result.execution_time,
+                created_at=tool_call.created_at
+            )
             
-            # Add tool result message
+            # Replace the old tool call with the updated one
+            for i, tc in enumerate(conversation.tool_calls):
+                if tc.call_id == func_call.call_id:
+                    conversation.tool_calls[i] = updated_tool_call
+                    break
+            
+            # Collect the result for batch message creation
+            tool_results.append({
+                "func_call": func_call,
+                "result": result
+            })
+        
+        # Add all tool results as a single combined message
+        # This is critical for Gemini API which requires function response count
+        # to match function call count in the same turn
+        if len(tool_results) == 1:
+            # Single tool call - add as single message
+            tr = tool_results[0]
             tool_message = Message(
                 role=MessageRole.TOOL,
-                content=str(result.result) if result.success else f"Error: {result.error_message}",
-                tool_call_id=func_call.call_id,
-                metadata={"tool_result": result.result, "success": result.success}
+                content=str(tr["result"].result) if tr["result"].success else f"Error: {tr['result'].error_message}",
+                tool_call_id=tr["func_call"].call_id,
+                metadata={
+                    "tool_result": tr["result"].result,
+                    "success": tr["result"].success,
+                    "tool_name": tr["func_call"].name
+                }
+            )
+            conversation.add_message(tool_message)
+        else:
+            # Multiple tool calls - combine results into metadata for proper handling
+            # Each tool response needs to be tracked but sent together
+            combined_content_parts = []
+            combined_metadata = {
+                "multiple_tool_responses": True,
+                "tool_responses": []
+            }
+            
+            for tr in tool_results:
+                result_content = str(tr["result"].result) if tr["result"].success else f"Error: {tr['result'].error_message}"
+                combined_content_parts.append(f"[{tr['func_call'].name}]: {result_content}")
+                combined_metadata["tool_responses"].append({
+                    "tool_name": tr["func_call"].name,
+                    "call_id": tr["func_call"].call_id,
+                    "result": tr["result"].result,
+                    "success": tr["result"].success
+                })
+            
+            # Create a single message with all tool responses
+            # The client.py will need to handle this properly for Gemini
+            tool_message = Message(
+                role=MessageRole.TOOL,
+                content="\n".join(combined_content_parts),
+                tool_call_id=tool_results[0]["func_call"].call_id,  # Primary call ID
+                metadata=combined_metadata
             )
             conversation.add_message(tool_message)
     

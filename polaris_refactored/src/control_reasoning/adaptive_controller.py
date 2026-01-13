@@ -1124,8 +1124,8 @@ class PolarisAdaptiveController:
     
     async def start(self) -> None:
         """Start the adaptive controller."""
-        # Load latest config
-        self._load_runtime_config()
+        # Load latest config (already loaded in __init__, but refresh)
+        self._load_configuration()
         
         # Start config watcher if enabled
         if self._config_watch_enabled:

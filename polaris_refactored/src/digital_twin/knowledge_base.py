@@ -249,15 +249,40 @@ class PolarisKnowledgeBase(Injectable):
         if not current_conditions:
             # Return top by confidence if no condition provided
             return sorted(all_patterns, key=lambda p: p.confidence, reverse=True)
-        # Simple similarity over condition key/value pairs
+        
+        # Simple similarity over condition keys (handles nested dicts safely)
+        def _flatten_keys(d: Dict[str, Any], prefix: str = "") -> set:
+            """Flatten dict keys for comparison, handling nested dicts."""
+            keys = set()
+            for k, v in d.items():
+                full_key = f"{prefix}.{k}" if prefix else k
+                keys.add(full_key)
+                if isinstance(v, dict):
+                    keys.update(_flatten_keys(v, full_key))
+            return keys
+        
         def _similarity(a: Dict[str, Any], b: Dict[str, Any]) -> float:
             if not a and not b:
                 return 1.0
-            a_items = set(a.items())
-            b_items = set(b.items())
-            inter = len(a_items & b_items)
-            union = len(a_items | b_items)
-            return inter / union if union else 0.0
+            if not a or not b:
+                return 0.0
+            # Compare flattened keys for structural similarity
+            a_keys = _flatten_keys(a)
+            b_keys = _flatten_keys(b)
+            inter = len(a_keys & b_keys)
+            union = len(a_keys | b_keys)
+            key_sim = inter / union if union else 0.0
+            
+            # Also compare top-level key overlap
+            top_a = set(a.keys())
+            top_b = set(b.keys())
+            top_inter = len(top_a & top_b)
+            top_union = len(top_a | top_b)
+            top_sim = top_inter / top_union if top_union else 0.0
+            
+            # Weighted average: top-level keys matter more
+            return 0.6 * top_sim + 0.4 * key_sim
+        
         scored = [(p, _similarity(current_conditions, p.conditions)) for p in all_patterns]
         filtered = [p for (p, s) in scored if s >= similarity_threshold]
         # Sort primarily by similarity (desc), then by confidence (desc)

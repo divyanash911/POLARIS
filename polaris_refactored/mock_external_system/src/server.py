@@ -8,7 +8,6 @@ This module provides the MockSystemServer class that handles:
 - Concurrent connection handling
 - Graceful shutdown
 
-Requirements: 1.1, 1.2
 """
 
 import asyncio

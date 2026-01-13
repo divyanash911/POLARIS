@@ -8,7 +8,6 @@ with POLARIS framework, testing:
 - Basic adaptation trigger and execution
 - End-to-end integration flows
 
-Requirements: 5.1, 5.2, 5.3, 5.4
 """
 
 import asyncio
